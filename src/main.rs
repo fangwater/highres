@@ -8,6 +8,7 @@ mod spending;
 mod symbolinfo;
 mod record;
 mod ordertake;
+mod outsplit;
 
 extern crate ndarray;
 extern crate ndarray_npy;
@@ -30,7 +31,7 @@ use crate::spending::{add_pending, clear_pending, drop_pending,S_PENDING_PRICEKE
 use crate::ordertake::{add_taking};
 use crate::record::{write_to_csv, RecordDumpItem};
 use crate::symbolinfo::get_market;
-
+use crate::outsplit::{split_csv_file};
 
 
 
@@ -280,18 +281,21 @@ fn do_symbol(symbol:&str) {
 
 }
 
-
-
 fn main() {
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
     info!("highres starting..");
-    
-    
-    
+        
     for symbol in &ENGIN_CONF.symbols {
         
         do_symbol(symbol);
         clear_pending();
         
     }
+        
+    for symbol in &ENGIN_CONF.symbols {
+        let file_name = ENGIN_CONF.dump_path.to_string()+"/"+symbol+"_orders.csv";
+        println!("file_name {:?}",file_name);
+        split_csv_file(&file_name,&(symbol.to_string()+"_orders_"),false,10);
+    }
+    
 }

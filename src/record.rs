@@ -37,7 +37,7 @@ pub struct TSRecordItem {
 pub fn write_to_csv(rd:&RecordDumpItem) {
 
    
-    let file_name = ENGIN_CONF.dump_path.to_string()+"/orders.csv";
+    let file_name = ENGIN_CONF.dump_path.to_string()+"/"+&rd.symbol+"_orders.csv";
     
    // let mut csv_writer = Writer::from_path(file_name).expect("Failed to create CSV writer");
 
@@ -62,7 +62,7 @@ pub fn write_to_csv(rd:&RecordDumpItem) {
 pub fn write_to_csv_ts(rd:&TSRecordItem) {
 
    
-    let file_name = ENGIN_CONF.dump_path.to_string()+"/nps.csv";
+    let file_name = ENGIN_CONF.dump_path.to_string()+"/"+&rd.symbol+"_nps.csv";
     
    // let mut csv_writer = Writer::from_path(file_name).expect("Failed to create CSV writer");
 
