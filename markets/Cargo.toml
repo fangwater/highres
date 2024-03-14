@@ -1,0 +1,15 @@
+[package]
+name = "markets"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+market_type = { path = "../market_type" }
+crypto-pair = "2.3.13"
+chrono = "0.4.24"
+reqwest = { version = "0.11.14", features = ["blocking", "gzip", "socks"] }
+serde = { version = "1.0.157", features = ["derive"] }
+serde_json = "1.0.94"

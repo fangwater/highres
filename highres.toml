@@ -1,0 +1,42 @@
+[engin]
+
+merged_market_path = "/Gdrive/zl/l2_trade/merged"
+tick_path = "/data2/zl/l2_trade/tickfactor_20231201_20231231"
+
+start_date = "20231207"
+end_date = "20231215"
+symbols = ["ARBUSDT"]
+sids = {0 = {"exchange" = "okx","etype" = "swap"}, 1 = {"exchange" = "binance","etype" = "swap"}, 2 = {"exchange" = "bybit","etype" = "swap"},3 = {"exchange" = "binance","etype" = "spot"},4 = {"exchange" = "okx","etype" = "spot"}}
+#sids = {0 = {"exchange" = "okx","etype" = "swap"}, 1 = {"exchange" = "binance","etype" = "swap"}, 2 = {"exchange" = "bybit","etype" = "swap"}}
+
+vsids = [0,1,2]
+stg = "arbmm2"
+dump_path = "/data2/run/data_zl"
+start_ts=707753600
+end_ts=2707818400
+
+is_spending_open_dump=false
+is_spending_tick_dump=false
+
+#maker延迟
+#maker_delay_ms = 10
+#cancel延迟
+cancel_delay_ms = 10
+#openrisk更新延迟
+#pos更新延迟
+
+
+
+[arbmm]
+amountu = 40
+max_order_keep_s=45
+
+
+[arbmt_sampling]
+amountu = 100
+ranges = [0, 0.0001, 0.0002, 0.0003]
+max_order_keep_s = 45
+
+[arbmm2]
+amountu = 40
+max_order_keep_s=30
