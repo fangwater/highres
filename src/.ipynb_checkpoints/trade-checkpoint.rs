@@ -2,17 +2,6 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 use ordered_float::OrderedFloat;
 
-lazy_static! {
-    pub static ref DELAY_CANCEL_DECISIONS: HashMap<i32, RwLock<PendingOrdersInPos>> = {
-        let mut map = HashMap::new();
-        
-        for sid in ENGIN_CONF.vsids.iter() {
-            let tu = PendingOrdersInPos { phash: HashMap::new() };
-            map.insert(*sid, RwLock::new(tu));
-            
-        }
-        map
-    };
 
 
 #[derive(Clone, Debug)]
@@ -70,7 +59,9 @@ pub struct MakeDecision {
     pub price:f64,
     pub amount:f64,
     pub max_order_keep_s:i32,
-    pub from_key:String
+    pub from_key:String,
+    pub dup_key:String,
+    pub target_sid:i32
 }
 
 

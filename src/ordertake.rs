@@ -3,6 +3,7 @@ use crate::gconf::{ENGIN_CONF};
 use crate::trade::{TradeInfo, DepthInfo, MakeDecision};
 use crate::record::{write_to_csv, RecordDumpItem};
 use crate::symbolinfo::get_market;
+use crate::target_sid_open::add;
 
 pub fn add_taking(tinfo:&mut TradeInfo, tds:&MakeDecision) {
     let sid:i32 = tds.sid;
@@ -21,7 +22,6 @@ pub fn add_taking(tinfo:&mut TradeInfo, tds:&MakeDecision) {
         contract_value = market.contract_value.unwrap();
         println!("contract_value={}",contract_value);
     }
-
   
     if tds.side == "buy".to_string() {
         //check ask-spreads
@@ -37,6 +37,7 @@ pub fn add_taking(tinfo:&mut TradeInfo, tds:&MakeDecision) {
                 tinfo.open+=left_amount*contract_value;
                 total_deal_avg_price = total_amountprice / deal_amount;
                 total_deal_token = deal_amount;
+                add(&sid, left_amount*contract_value);
                 
                 info!("finish taker-buy, deal_amount={} total_deal_avg_price={}", deal_amount, total_deal_avg_price);
                 break
@@ -48,6 +49,7 @@ pub fn add_taking(tinfo:&mut TradeInfo, tds:&MakeDecision) {
                 let p = tinfo.pos.get_mut(&sid).unwrap();
                 *p+=amount;
                 tinfo.open+=amount*contract_value;
+                add(&sid, amount*contract_value);
             }
         }
         if total_deal_token == 0. {
@@ -119,6 +121,7 @@ pub fn add_taking(tinfo:&mut TradeInfo, tds:&MakeDecision) {
                 tinfo.open-=left_amount*contract_value;
                 total_deal_avg_price = total_amountprice / deal_amount;
                 total_deal_token = deal_amount;
+                add(&sid, -left_amount*contract_value);
                 
                 info!("finish taker-sell, deal_amount={} total_deal_avg_price={} amount_f64={}", deal_amount, total_deal_avg_price, amount_f64);
                 break
@@ -130,6 +133,8 @@ pub fn add_taking(tinfo:&mut TradeInfo, tds:&MakeDecision) {
                 let p = tinfo.pos.get_mut(&sid).unwrap();
                 *p-=amount;
                 tinfo.open-=amount*contract_value;
+                add(&sid, -amount*contract_value);
+
             }
         }
         if total_deal_token == 0. {

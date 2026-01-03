@@ -9,6 +9,7 @@ mod symbolinfo;
 mod record;
 mod ordertake;
 mod outsplit;
+mod target_sid_open;
 
 extern crate ndarray;
 extern crate ndarray_npy;
@@ -33,6 +34,7 @@ use crate::record::{write_to_csv, RecordDumpItem};
 use crate::symbolinfo::get_market;
 use crate::outsplit::{split_csv_file};
 
+use crate::stgs::{pairmm};
 
 
 fn arraybase_to_vec<T, S>(array: ArrayBase<S, Ix1>) -> Vec<T>
@@ -44,8 +46,6 @@ where
 }
 
 fn record_pendings(tsms:i64, tinfo:&mut TradeInfo) {
-
-    
     for sid in &ENGIN_CONF.vsids {
         if let Some(mut porders) = S_PENDING_PRICEKEY_BIDS[&sid].try_write_for(std::time::Duration::from_secs(1)) {
             let mut vdel:Vec<OrderedFloat<f64>> = Vec::new();
@@ -57,12 +57,12 @@ fn record_pendings(tsms:i64, tinfo:&mut TradeInfo) {
                     let mut contract_value = 1.;
                     if e["etype"] == "swap"  && e["exchange"] == "okx" {
                         contract_value = market.contract_value.unwrap();
-                        println!("contract_value={}",contract_value);
+                        // println!("contract_value={}",contract_value);
                     }
                     
                     
 
-                    if ENGIN_CONF.is_spending_tick_dump {
+                    if ENGIN_CONF.is_spending_tick_dump  && (tsms % ENGIN_CONF.tick_dump_modts) == 0{
                         let dinfo:&mut DepthInfo = tinfo.depths.get_mut(sid).unwrap();
                         let update_ts_ms = tsms;
                         let rd:RecordDumpItem = RecordDumpItem{create_ts:pitem.create_ts,
@@ -98,10 +98,10 @@ fn record_pendings(tsms:i64, tinfo:&mut TradeInfo) {
                     let mut contract_value = 1.;
                     if e["etype"] == "swap"  && e["exchange"] == "okx" {
                         contract_value = market.contract_value.unwrap();
-                        println!("contract_value={}",contract_value);
+                        // println!("contract_value={}",contract_value);
                     }
 
-                    if ENGIN_CONF.is_spending_tick_dump {
+                    if ENGIN_CONF.is_spending_tick_dump  && (tsms % ENGIN_CONF.tick_dump_modts) == 0{
                         
                         let dinfo:&mut DepthInfo = tinfo.depths.get_mut(sid).unwrap();
 
@@ -142,11 +142,11 @@ fn do_tick(v:&Vec<f64>, tinfo:&mut TradeInfo) {
         info!("td={:?}", td);
         if td.ttype == "maker".to_string() {
             add_pending(tinfo, &td);
-        }
+        } 
         else if td.ttype == "taker".to_string() {
             add_taking(tinfo, &td);
-        }
-    }
+        } 
+    } 
     
     for cd in cds {
         drop_pending((v[0]*1000.) as i64,tinfo, &cd);
@@ -162,7 +162,6 @@ fn do_mm(v:&Vec<f64>, tinfo:&mut TradeInfo) {
     else if v[5] == 0. {
         tprocess::process(v, tinfo);
     }
-    
 }
 
 fn do_symbol(symbol:&str) {
@@ -179,10 +178,11 @@ fn do_symbol(symbol:&str) {
     
     let mut iter_tick = ticker_npy.axis_iter(Axis(0));
     
-    
     let mut current_date = start_date;
     let mut tick_finished = false;
     let mut mm_finished = false;
+    
+    stg::cb_init(&tinfo);
     
     while current_date <= end_date {
         if tick_finished {
@@ -193,19 +193,16 @@ fn do_symbol(symbol:&str) {
         for i in 0..24 {
             let datestr = format!("{:02}", i);
             
-        
             let merged_market_path = String::from(&ENGIN_CONF.merged_market_path)+"/"+symbol+"_"+&current_date.format("%Y%m%d").to_string()+"_"+&datestr+".npy";
             if !fs::metadata(merged_market_path.clone()).is_ok() {
                 info!("{} read mm {} empty, ignore", current_date.format("%Y%m%d"), &merged_market_path);
-                continue;
-            }
-            info!("{}, read mm merged_market_path={}", current_date.format("%Y%m%d"), &merged_market_path);
+                continue; 
+            } 
+            info!("{}, read mm merged_market_path={}", current_date.format("%Y%m%d"), &merged_market_path); 
             let reader_merged_market = File::open(merged_market_path).unwrap();
             let merged_market_npy = Array2::<f64>::read_npy(reader_merged_market).unwrap();
             let mut iter_mm = merged_market_npy.axis_iter(Axis(0));
-
             let mut jump_ts:f64 = 0.;
-
 
             loop {
                 if mm_finished {
@@ -243,6 +240,7 @@ fn do_symbol(symbol:&str) {
                                     let mm_ts = value_mm[0];
                                     debug!("get mm ts={}", mm_ts);
                                     let vec_mm: Vec<f64> = arraybase_to_vec(value_mm);
+                                    
                                     do_mm(&vec_mm, &mut tinfo);
 
                                     if mm_ts > next_tick_ts {
@@ -263,9 +261,7 @@ fn do_symbol(symbol:&str) {
                                     break
                                 }
                             }
-
                         }
-
                     }
                     None => {
                         info!("tick iter has ended");
@@ -278,7 +274,6 @@ fn do_symbol(symbol:&str) {
         current_date += Duration::days(1);
         info!("add one {}, end={}", current_date, end_date);
     }
-
 }
 
 fn main() {
@@ -286,16 +281,15 @@ fn main() {
     info!("highres starting..");
         
     for symbol in &ENGIN_CONF.symbols {
-        
+        pairmm::clear_ongoing_pending();
         do_symbol(symbol);
         clear_pending();
-        
-    }
-        
+    } 
+    
     for symbol in &ENGIN_CONF.symbols {
         let file_name = ENGIN_CONF.dump_path.to_string()+"/"+symbol+"_orders.csv";
         println!("file_name {:?}",file_name);
-        split_csv_file(&file_name,&(symbol.to_string()+"_orders_"),false,10);
+        split_csv_file(&file_name,&(symbol.to_string()+"_orders_"),false,10); 
     }
     
 }

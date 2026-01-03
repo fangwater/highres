@@ -11,6 +11,7 @@ use rust_decimal::Decimal;
 use std::str::FromStr;
 use rust_decimal::prelude::*;
 use crate::record::{write_to_csv, RecordDumpItem, TSRecordItem};
+use crate::stg::cb_finished;
 
 
 
@@ -50,12 +51,45 @@ pub fn clear_pending() {
     }
 }
 
+
+pub fn get_pending_num_dup_key_bid(sid:i32, dup_key:&str) -> i32 {
+    let mut n_bids:i32 = 0;
+    
+    let porders = S_PENDING_PRICEKEY_BIDS[&sid].read();
+    for (_price, vpitem) in porders.phash.iter() {
+        for v in vpitem {
+            if v.dup_key == dup_key {
+                n_bids+=1
+            }
+        }
+    }    
+
+    return n_bids
+}
+    
+pub fn get_pending_num_dup_key_ask(sid:i32, dup_key:&str) -> i32 {
+    let mut n_asks:i32 = 0;
+    
+  
+    let porders = S_PENDING_PRICEKEY_ASKS[&sid].read();
+    for (_price, vpitem) in porders.phash.iter() {
+        for v in vpitem {
+            if v.dup_key == dup_key {
+                n_asks+=1
+            }
+        }
+    }
+    
+    return n_asks
+}
+
 pub fn get_pending_num_from_key_bid(sid:i32, from_key:&str) -> i32 {
     let mut n_bids:i32 = 0;
     
     let porders = S_PENDING_PRICEKEY_BIDS[&sid].read();
     for (_price, vpitem) in porders.phash.iter() {
         for v in vpitem {
+            //info!("v={:?}", v);
             if v.from_key == from_key {
                 n_bids+=1
             }
@@ -167,6 +201,9 @@ pub fn drop_pending(ts:i64, tinfo:&mut TradeInfo, cds:&CancelDecision) {
         contract_value = market.contract_value.unwrap();
     }
     let sid = cds.sid;
+    
+
+    
     if &cds.side == "bid" {
         if let Some(mut porders) = S_PENDING_PRICEKEY_BIDS[&cds.sid].try_write_for(Duration::from_secs(1)) {
             match porders.phash.get_mut(&OrderedFloat(cds.price)) {
@@ -180,6 +217,11 @@ pub fn drop_pending(ts:i64, tinfo:&mut TradeInfo, cds:&CancelDecision) {
                             //     let rd:RecordDumpItem = RecordDumpItem{create_ts:v.create_ts,update_ts:update_ts_ms,client_order_id:v.client_order_id.to_string(),symbol:tinfo.symbol.to_string(), ttype:"maker".to_string(), sid:sid, side:"buy".to_string(), price:v.price, amount_init:v.amount_init*contract_value, amount_update:v.amount*contract_value, status:"canceled".to_string()};
                             //     write_to_csv(&rd);
                             // }
+                            info!("cancel cb_finished, v={:?}", v);
+                            
+                            
+                            cb_finished(ts, tinfo, v, true);
+                            // cb_finished((ts as i64)/1000, tinfo, v, true);
 
                             break;
                         }
@@ -209,6 +251,8 @@ pub fn drop_pending(ts:i64, tinfo:&mut TradeInfo, cds:&CancelDecision) {
                             //     let rd:RecordDumpItem = RecordDumpItem{create_ts:v.create_ts,update_ts:update_ts_ms,client_order_id:v.client_order_id.to_string(),symbol:tinfo.symbol.to_string(), ttype:"maker".to_string(), sid:sid, side:"sell".to_string(), price:v.price, amount_init:v.amount_init*contract_value, amount_update:v.amount*contract_value, status:"canceled".to_string()};
                             //     write_to_csv(&rd);                                
                             // }
+                            cb_finished(ts, tinfo, v, true);
+                            // cb_finished((ts as i64)/1000, tinfo, v, true);
                             break;
                         }
                         idx2del+=1;
@@ -258,11 +302,18 @@ pub fn add_pending(tinfo:&mut TradeInfo, tds:&MakeDecision) {
             amount_inpos = dinfo.bids[&OrderedFloat(bid_price_f64)];
         }
         info!("cid={} sid={} {} bid add tsize={} tick_size_keep={} price={} adust price={} amount={} amount_inpos={}", tds.client_order_id, tds.sid, tds.from_key, tick_size, tick_size_keep, tds.price, bid_price_f64, tds.amount, amount_inpos);
+        
+        if bid_price_f64 >= dinfo.ask1 {
+            info!("bid price={} > ask1={}, ignore", bid_price_f64, dinfo.ask1);
+            return;
+        }
 
         let p:PendingItem = PendingItem{
             create_ts:tds.create_ts*1000,
+            sid:tds.sid,
             client_order_id:tds.client_order_id.to_string(),
             from_key:tds.from_key.to_string(),
+            dup_key:tds.dup_key.to_string(),
             price:bid_price_f64,
             amount:tds.amount,
             amount_init:tds.amount,
@@ -270,7 +321,8 @@ pub fn add_pending(tinfo:&mut TradeInfo, tds:&MakeDecision) {
             side:"bid".to_string(),
             backlen:0.,
             tlen:amount_inpos,
-            trade_comsume_amount:0.
+            trade_comsume_amount:0.,
+            target_sid:tds.target_sid,
         };
         if ENGIN_CONF.is_spending_open_dump {
             let rd:RecordDumpItem = RecordDumpItem{
@@ -322,10 +374,17 @@ pub fn add_pending(tinfo:&mut TradeInfo, tds:&MakeDecision) {
         }
         info!("cid={} sid={} {} ask add tsize={} tick_size_keep={} price={} adust price={}  amount={} amount_inpos={}", tds.client_order_id, tds.sid, tds.from_key, tick_size, tick_size_keep, tds.price, ask_price_f64, tds.amount, amount_inpos);
         
+        if ask_price_f64 <= dinfo.bid1 {
+            info!("bid price={} < bid1={}, ignore", ask_price_f64, dinfo.bid1);
+            return;
+        }
+        
         let p:PendingItem = PendingItem{
             create_ts:tds.create_ts*1000,
+            sid:tds.sid, 
             client_order_id:tds.client_order_id.to_string(),
             from_key:tds.from_key.to_string(),
+            dup_key:tds.dup_key.to_string(),
             price:ask_price_f64,
             amount:tds.amount,
             amount_init:tds.amount,
@@ -333,7 +392,8 @@ pub fn add_pending(tinfo:&mut TradeInfo, tds:&MakeDecision) {
             tlen:amount_inpos,
             side:"ask".to_string(),
             backlen:0.,
-            trade_comsume_amount:0.
+            trade_comsume_amount:0.,
+            target_sid:tds.target_sid,
         };
         if ENGIN_CONF.is_spending_open_dump {
 
@@ -371,6 +431,7 @@ pub fn add_pending(tinfo:&mut TradeInfo, tds:&MakeDecision) {
         } else {
             panic!("get lock err")
         }
+        //info!("S_PENDING_PRICEKEY_ASKS={:?}", S_PENDING_PRICEKEY_ASKS[&tds.sid]);
         
     }else {
         panic!("side={}",  tds.side);
@@ -383,8 +444,10 @@ pub fn add_pending(tinfo:&mut TradeInfo, tds:&MakeDecision) {
 #[derive(Debug)]
 pub struct PendingItem {
     pub create_ts: i64,
+    pub sid:i32,
     pub client_order_id: String,
     pub from_key: String,
+    pub dup_key: String,
     pub price: f64,
     pub side: String, //bid ask
     pub amount: f64,
@@ -393,6 +456,8 @@ pub struct PendingItem {
     pub backlen:f64,
     pub tlen: f64,
     pub trade_comsume_amount: f64,
+    pub target_sid:i32,
+    
 }
 
 #[derive(Debug)]

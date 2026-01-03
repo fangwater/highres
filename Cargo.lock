@@ -638,32 +638,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd5256b483761cd23699d0da46cc6fd2ee3be420bbe6d020ae4a091e70b7e9fd"
 
 [[package]]
-name = "highres_arbmm2"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "config",
- "csv",
- "env_logger",
- "lazy_static",
- "log",
- "log4rs",
- "market_type",
- "markets",
- "mm_common",
- "ndarray",
- "ndarray-npy",
- "once_cell",
- "ordered-float 4.2.0",
- "parking_lot 0.11.2",
- "rust_decimal",
- "serde 1.0.196",
- "serde_json",
- "shellexpand",
- "tempfile",
-]
-
-[[package]]
 name = "http"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1623,6 +1597,32 @@ name = "ryu"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e86697c916019a8588c99b5fac3cead74ec0b4b819707a682fd4d23fa0ce1ba1"
+
+[[package]]
+name = "sampling_v6"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "config",
+ "csv",
+ "env_logger",
+ "lazy_static",
+ "log",
+ "log4rs",
+ "market_type",
+ "markets",
+ "mm_common",
+ "ndarray",
+ "ndarray-npy",
+ "once_cell",
+ "ordered-float 4.2.0",
+ "parking_lot 0.11.2",
+ "rust_decimal",
+ "serde 1.0.196",
+ "serde_json",
+ "shellexpand",
+ "tempfile",
+]
 
 [[package]]
 name = "schannel"

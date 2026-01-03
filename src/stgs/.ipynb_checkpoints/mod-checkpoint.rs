@@ -1,3 +1,4 @@
-pub mod arbmm;
-pub mod arbmm2;
-pub mod arbmt_sampling;
+pub mod pairmm;
+pub mod sampling;
+pub mod sampling_v5;
+pub mod sampling_v6;

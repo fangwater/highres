@@ -9,6 +9,7 @@ mod symbolinfo;
 mod record;
 mod ordertake;
 mod outsplit;
+mod target_sid_open;
 
 extern crate ndarray;
 extern crate ndarray_npy;
@@ -33,6 +34,7 @@ use crate::record::{write_to_csv, RecordDumpItem};
 use crate::symbolinfo::get_market;
 use crate::outsplit::{split_csv_file};
 
+use crate::stgs::{pairmm};
 
 
 fn arraybase_to_vec<T, S>(array: ArrayBase<S, Ix1>) -> Vec<T>
@@ -57,7 +59,7 @@ fn record_pendings(tsms:i64, tinfo:&mut TradeInfo) {
                     let mut contract_value = 1.;
                     if e["etype"] == "swap"  && e["exchange"] == "okx" {
                         contract_value = market.contract_value.unwrap();
-                        println!("contract_value={}",contract_value);
+                        // println!("contract_value={}",contract_value);
                     }
                     
                     
@@ -98,7 +100,7 @@ fn record_pendings(tsms:i64, tinfo:&mut TradeInfo) {
                     let mut contract_value = 1.;
                     if e["etype"] == "swap"  && e["exchange"] == "okx" {
                         contract_value = market.contract_value.unwrap();
-                        println!("contract_value={}",contract_value);
+                        // println!("contract_value={}",contract_value);
                     }
 
                     if ENGIN_CONF.is_spending_tick_dump {
@@ -184,6 +186,8 @@ fn do_symbol(symbol:&str) {
     let mut tick_finished = false;
     let mut mm_finished = false;
     
+    stg::cb_init(&tinfo);
+    
     while current_date <= end_date {
         if tick_finished {
             info!("finish, exit");
@@ -243,6 +247,7 @@ fn do_symbol(symbol:&str) {
                                     let mm_ts = value_mm[0];
                                     debug!("get mm ts={}", mm_ts);
                                     let vec_mm: Vec<f64> = arraybase_to_vec(value_mm);
+                                    
                                     do_mm(&vec_mm, &mut tinfo);
 
                                     if mm_ts > next_tick_ts {
@@ -286,7 +291,7 @@ fn main() {
     info!("highres starting..");
         
     for symbol in &ENGIN_CONF.symbols {
-        
+        pairmm::clear_ongoing_pending();
         do_symbol(symbol);
         clear_pending();
         

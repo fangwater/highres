@@ -15,14 +15,46 @@ mod error;
 mod exchanges;
 mod market;
 
+
 // use crypto_market_type::MarketType;
 use market_type::MarketType;
+
 
 
 pub use error::Error;
 pub use market::{Fees, Market, Precision, QuantityLimit};
 
 use error::Result;
+
+use std::{fs, io};
+use std::path::Path;
+use serde_json;
+
+
+// 构建缓存文件名
+fn cache_filename(exchange: &str, market_type: &MarketType) -> String {
+    // println!(market_type)
+    format!("{}_{}_cache.json", exchange, market_type.as_str())
+}
+
+// 检查缓存是否有效
+fn is_cache_valid(exchange: &str, market_type: &MarketType) -> bool {
+    Path::new(&cache_filename(exchange, market_type)).exists()
+}
+
+// 从缓存中读取市场数据
+fn read_cache(exchange: &str, market_type: &MarketType) -> io::Result<Vec<Market>> {
+    let cache_content = fs::read_to_string(cache_filename(exchange, market_type))?;
+    let markets = serde_json::from_str(&cache_content)?;
+    Ok(markets)
+}
+
+// 将市场数据写入缓存
+fn write_cache(exchange: &str, market_type: &MarketType, markets: &[Market]) -> io::Result<()> {
+    let json = serde_json::to_string(markets)?;
+    fs::write(cache_filename(exchange, market_type), json)?;
+    Ok(())
+}
 
 /// Fetch trading symbols.
 pub fn fetch_symbols(exchange: &str, market_type: MarketType) -> Result<Vec<String>> {
@@ -68,7 +100,16 @@ pub fn fetch_symbols(exchange: &str, market_type: MarketType) -> Result<Vec<Stri
 /// println!("{}", serde_json::to_string_pretty(&markets).unwrap())
 /// ```
 pub fn fetch_markets(exchange: &str, market_type: MarketType) -> Result<Vec<Market>> {
-    match exchange {
+    // 首先检查缓存是否有效
+    if is_cache_valid(exchange, &market_type) {
+        // 如果有效，就读取缓存
+        if let Ok(markets) = read_cache(exchange, &market_type) {
+            return Ok(markets);
+        }
+        panic!("fetch_markets read cache err");
+    }
+    
+    let result = match exchange {
         "binance" => exchanges::binance::fetch_markets(market_type),
         "bitfinex" => exchanges::bitfinex::fetch_markets(market_type),
         "bitget" => exchanges::bitget::fetch_markets(market_type),
@@ -90,5 +131,18 @@ pub fn fetch_markets(exchange: &str, market_type: MarketType) -> Result<Vec<Mark
         "zb" => exchanges::zb::fetch_markets(market_type),
         "zbg" => exchanges::zbg::fetch_markets(market_type),
         _ => panic!("Unsupported exchange {exchange}"),
+    };
+    
+    match result {
+        Ok(markets) => {
+            if let Err(e) = write_cache(exchange, &market_type, markets.as_slice()) {
+                eprintln!("fetch_markets write cache err: {}", e);
+            }
+            
+            Ok(markets)
+        },
+        Err(e) => {
+            panic!("fetch_markets: {}", e);
+        },
     }
 }

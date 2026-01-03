@@ -152,12 +152,22 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
         
         let df = t[*COLS.get(&("f_".to_string()+&sid.to_string())).unwrap()];
         let fstd = t[*COLS.get(&("s_".to_string()+&sid.to_string())).unwrap()];
+        if *sid == 3 {
+            info!("hh1, df={}", df);
+        }
         
         let rb_bid_dfs = get_rbs_from_df(df, fstd);
         let rb_ask_dfs = get_rbs_from_df(-df, fstd);
         
         
+        
+        
         for rb_bid_df in rb_bid_dfs {
+            
+            if *sid == 3 {
+                info!("hh, rb_bid_df={}", rb_bid_df);
+            }
+            
             let mut rb_bid = rb_bid_df + rb_bid_openrisk + rb_bid_posctl;
             rb_bid = rb_bid.max(0.);
             if rb_bid > 0.0005 {
@@ -184,7 +194,7 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
                 ttype:"maker".to_string(), 
                 price:bid_price, 
                 amount:amount_token, 
-                from_key:pkey.to_string()
+                from_key:pkey.to_string(),target_sid:-1
             });
         }
         
@@ -215,7 +225,8 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
                 ttype:"maker".to_string(), 
                 price:ask_price, 
                 amount:amount_token, 
-                from_key:pkey.to_string()
+                from_key:pkey.to_string(), target_sid:-1
+                
             });
         }
 

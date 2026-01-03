@@ -341,7 +341,7 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
                     ttype:"taker".to_string(), 
                     price:0., 
                     amount:amount_hand_token, 
-                    from_key:pairkey.to_string()}); 
+                    from_key:pairkey.to_string(),target_sid:-1}); 
             }
             if gopenu > 0. && df != -1. && df > thr_taker && upos > -full_pos {
             //if df != -1. && df > thr_taker && upos > -full_pos {
@@ -357,7 +357,7 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
                     ttype:"taker".to_string(), 
                     price:0., 
                     amount:amount_hand_token, 
-                    from_key:pairkey.to_string()});
+                    from_key:pairkey.to_string(),target_sid:-1});
             }
             
             let bid_price:f64 = dinfo.bid1 * (1. - rb_bid);
@@ -365,14 +365,14 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
                 let curr_cid = COID_INC.fetch_add(1, Ordering::Relaxed);
                 let client_order_id = "bid_m_".to_string()+&sid.to_string()+"_"+ &curr_cid.to_string();
                 
-                tds.push(MakeDecision{create_ts:t[*COLS.get("ts").unwrap()] as i64,client_order_id:client_order_id, max_order_keep_s:ARBMM_CONF.max_order_keep_s, side:"buy".to_string(), sid:*sid, ttype:"maker".to_string(), price:bid_price, amount:amount_hand_token, from_key:pairkey.to_string()});
+                tds.push(MakeDecision{create_ts:t[*COLS.get("ts").unwrap()] as i64,client_order_id:client_order_id, max_order_keep_s:ARBMM_CONF.max_order_keep_s, side:"buy".to_string(), sid:*sid, ttype:"maker".to_string(), price:bid_price, amount:amount_hand_token, from_key:pairkey.to_string(),target_sid:-1});
             }
             let ask_price:f64 = dinfo.ask1 * (1. + rb_ask);
             if rb_ask_df != -1. && df != -1. && num_asks < 2 && rb_ask < 0.0007 {
                 let curr_cid = COID_INC.fetch_add(1, Ordering::Relaxed);
                 let client_order_id = "ask_m_".to_string()+&sid.to_string()+"_"+ &curr_cid.to_string();
                 
-                tds.push(MakeDecision{create_ts:t[*COLS.get("ts").unwrap()] as i64, client_order_id:client_order_id, max_order_keep_s:ARBMM_CONF.max_order_keep_s, side:"sell".to_string(), sid:*sid, ttype:"maker".to_string(), price:ask_price, amount:amount_hand_token, from_key:pairkey.to_string()});
+                tds.push(MakeDecision{create_ts:t[*COLS.get("ts").unwrap()] as i64, client_order_id:client_order_id, max_order_keep_s:ARBMM_CONF.max_order_keep_s, side:"sell".to_string(), sid:*sid, ttype:"maker".to_string(), price:ask_price, amount:amount_hand_token, from_key:pairkey.to_string(),target_sid:-1});
             }            
   
         }

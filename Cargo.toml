@@ -1,5 +1,5 @@
 [package]
-name = "highres_arbmm2"
+name = "sampling_v6"
 version = "0.1.0"
 edition = "2021"
 
@@ -10,8 +10,8 @@ mm_common = { path = "../mm_common" }
 market_type = { path = "market_type" }
 markets = { path = "markets" }
 
-tempfile = "3.3.0"
-shellexpand = "2.1.0"
+tempfile = "3.2.0"  
+shellexpand = "2.1.0" 
 
 
 ndarray = "0.15"

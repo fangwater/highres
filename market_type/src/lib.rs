@@ -49,6 +49,25 @@ pub enum MarketType {
     BVOL,
 }
 
+impl MarketType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            MarketType::Unknown => "Unknown",
+            MarketType::Spot => "Spot",
+            MarketType::LinearFuture => "LinearFuture",
+            MarketType::InverseFuture => "InverseFuture",
+            MarketType::LinearSwap => "LinearSwap",
+            MarketType::InverseSwap => "InverseSwap",
+            MarketType::AmericanOption => "AmericanOption",
+            MarketType::EuropeanOption => "EuropeanOption",
+            MarketType::QuantoFuture => "QuantoFuture",
+            MarketType::QuantoSwap => "QuantoSwap",
+            MarketType::Move => "Move",
+            MarketType::BVOL => "BVOL"
+        }
+    }
+}
+
 /// Get market types of a cryptocurrency exchange.
 pub fn get_market_types(exchange: &str) -> Vec<MarketType> {
     match exchange {

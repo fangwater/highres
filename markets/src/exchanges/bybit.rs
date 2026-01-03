@@ -130,9 +130,7 @@ struct ResponseSpotV5 {
 // See https://bybit-exchange.github.io/docs/inverse/#t-querysymbol
 fn fetch_markets_raw() -> Result<Vec<BybitMarket>> {
     let txt = http_get("https://api.bybit.com/v2/public/symbols", None)?;
-    println!("{}",txt);
     let resp = serde_json::from_str::<Response>(&txt)?;
-    println!("11111");
     assert_eq!(resp.ret_code, 0);
     Ok(resp.result.into_iter().filter(|m| m.status == "Trading").collect())
 }

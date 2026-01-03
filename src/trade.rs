@@ -59,7 +59,9 @@ pub struct MakeDecision {
     pub price:f64,
     pub amount:f64,
     pub max_order_keep_s:i32,
-    pub from_key:String
+    pub from_key:String,
+    pub dup_key:String,
+    pub target_sid:i32
 }
 
 

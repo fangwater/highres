@@ -17,6 +17,6 @@ appenders:
         count: 20
 
 root:
-  level: debug
+  level: info
   appenders:
     - file

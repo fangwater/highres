@@ -128,7 +128,7 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
                 let curr_cid = COID_INC.fetch_add(1, Ordering::Relaxed);
                 let client_order_id = "bid_m_".to_string()+&pairkey+"_"+ &curr_cid.to_string();
 
-                tds.push(MakeDecision{create_ts:t[0] as i64,client_order_id:client_order_id, max_order_keep_s:0, side:"buy".to_string(), sid:*sid, ttype:"maker".to_string(), price:bid_price, amount:amount_hand_token, from_key:pairkey.to_string()});
+                tds.push(MakeDecision{create_ts:t[0] as i64,client_order_id:client_order_id, max_order_keep_s:0, side:"buy".to_string(), sid:*sid, ttype:"maker".to_string(), price:bid_price, amount:amount_hand_token, from_key:pairkey.to_string(),target_sid:-1});
             }
 
             let num_asks = get_pending_num_from_key_ask(*sid, &pairkey.to_string());
@@ -137,7 +137,7 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
                 let curr_cid = COID_INC.fetch_add(1, Ordering::Relaxed);
                 let client_order_id = "ask_m_".to_string()+&pairkey+"_"+ &curr_cid.to_string();
 
-                tds.push(MakeDecision{create_ts:t[0] as i64, client_order_id:client_order_id, max_order_keep_s:0, side:"sell".to_string(), sid:*sid, ttype:"maker".to_string(), price:ask_price, amount:amount_hand_token, from_key:pairkey.to_string()});
+                tds.push(MakeDecision{create_ts:t[0] as i64, client_order_id:client_order_id, max_order_keep_s:0, side:"sell".to_string(), sid:*sid, ttype:"maker".to_string(), price:ask_price, amount:amount_hand_token, from_key:pairkey.to_string(),target_sid:-1});
             }
 
             
@@ -183,7 +183,7 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
             ttype:"taker".to_string(), 
             price:0., 
             amount:amount_hand_token, 
-            from_key:pairkey.to_string()});
+            from_key:pairkey.to_string(),target_sid:-1});
         
         let curr_cid2 = COID_INC.fetch_add(1, Ordering::Relaxed);
         let client_order_id = "ask_t_".to_string() + &curr_cid2.to_string();
@@ -195,7 +195,7 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
             ttype:"taker".to_string(), 
             price:0., 
             amount:amount_hand_token, 
-            from_key:pairkey.to_string()});
+            from_key:pairkey.to_string(),target_sid:-1});
     }
 
     return tds;
