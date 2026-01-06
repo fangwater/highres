@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-mm_common = { path = "../mm_common" }
+mm_common = { path = "mm_common" }
 market_type = { path = "market_type" }
 markets = { path = "markets" }
 
@@ -29,7 +29,6 @@ parking_lot = "0.11"
 once_cell = "1.18.0"
 rust_decimal = "1.23.0"
 csv = "1.1.6"
-
 
 
 

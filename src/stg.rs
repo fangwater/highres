@@ -2,7 +2,7 @@ use crate::trade::{TradeInfo};
 use log::{info,debug};
 use crate::gconf::{ENGIN_CONF};
 use crate::trade::{MakeDecision, CancelDecision};
-use crate::stgs::{pairmm};
+use crate::stgs::{pairmm, pairmm_simple};
 use crate::stgs::{sampling,sampling_v5,sampling_v6};
 
 
@@ -12,6 +12,8 @@ use crate::spending::{PendingItem};
 pub fn cb_init(tinfo:&TradeInfo) {
     if ENGIN_CONF.stg == "pairmm" {
         return pairmm::cb_init(tinfo);
+    }else if ENGIN_CONF.stg == "pairmm_simple" {
+        return pairmm_simple::cb_init(tinfo);
     }else if ENGIN_CONF.stg == "sampling" {
         return sampling::cb_init(tinfo);
     }else if ENGIN_CONF.stg == "sampling_v5" {
@@ -26,6 +28,8 @@ pub fn cb_init(tinfo:&TradeInfo) {
 pub fn cb_filled(tinfo:&mut TradeInfo, pitem:&PendingItem, filled_amount:f64) {
     if ENGIN_CONF.stg == "pairmm" {
         return pairmm::cb_filled(tinfo, pitem, filled_amount);
+    }else if ENGIN_CONF.stg == "pairmm_simple" {
+        return pairmm_simple::cb_filled(tinfo, pitem, filled_amount);
     }else if ENGIN_CONF.stg == "sampling"{
         return sampling::cb_filled(tinfo, pitem, filled_amount);
     }else if ENGIN_CONF.stg == "sampling_v5"{
@@ -41,6 +45,8 @@ pub fn cb_filled(tinfo:&mut TradeInfo, pitem:&PendingItem, filled_amount:f64) {
 pub fn cb_finished(ts:i64, tinfo:&mut TradeInfo, pitem:&PendingItem, is_cancel:bool) {
     if  ENGIN_CONF.stg == "pairmm" {
         return pairmm::cb_finished(ts, tinfo, pitem, is_cancel);
+    } else if ENGIN_CONF.stg == "pairmm_simple" {
+        return pairmm_simple::cb_finished(ts, tinfo, pitem, is_cancel);
     } else if ENGIN_CONF.stg == "sampling"{
         return sampling::cb_finished(ts, tinfo, pitem, is_cancel);
     }else if ENGIN_CONF.stg == "sampling_v5"{
@@ -63,6 +69,8 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
     
     if ENGIN_CONF.stg == "pairmm" {
         return pairmm::make(t, tinfo);
+    }else if ENGIN_CONF.stg == "pairmm_simple" {
+        return pairmm_simple::make(t, tinfo);
     }else if ENGIN_CONF.stg == "sampling"{
         return sampling::make(t, tinfo);
     }else if ENGIN_CONF.stg == "sampling_v5"{
@@ -80,6 +88,8 @@ pub fn cancel(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<CancelDecision>{
     
     if ENGIN_CONF.stg == "pairmm" {
         return pairmm::cancel(t, tinfo);
+    }else if ENGIN_CONF.stg == "pairmm_simple" {
+        return pairmm_simple::cancel(t, tinfo);
     }else if ENGIN_CONF.stg == "sampling"{
         return sampling::cancel(t, tinfo);
     }else if ENGIN_CONF.stg == "sampling_v5"{

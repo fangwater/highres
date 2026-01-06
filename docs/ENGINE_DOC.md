@@ -43,7 +43,7 @@ structs.
 - `symbols`: list of symbols (ex: `DOTUSDT`).
 - `sids`: map from sid -> {exchange, etype}.
 - `vsids`: list of active sids (subset of `sids`).
-- `stg`: strategy selector: `pairmm`, `sampling`, `sampling_v5`, `sampling_v6`.
+- `stg`: strategy selector: `pairmm`, `pairmm_simple`, `sampling`, `sampling_v5`, `sampling_v6`.
 - `dump_path`: output folder for CSVs (default `data`).
 - `start_ts`, `end_ts`: time filter for ticks (seconds).
 - `cancel_delay_ms`: cancel delay used in decisions.
@@ -85,6 +85,7 @@ Common assumptions from code:
   - `sampling_v6`: `ts`, `signal1`, `signal2`, `signal3`, `buy_cancel`,
     `sell_cancel`.
   - `pairmm`: expects factor columns like `f_0_1`, `f_1_0` (see `COLS` map).
+  - `pairmm_simple`: only uses `ts` (no factor columns).
 
 ### 4.2 Merged market data (`merged_market_path/{symbol}_{YYYYMMDD}_{HH}.npy`)
 
@@ -258,7 +259,15 @@ Pair market-making with open and close legs:
 
 Close pricing uses `close_rb` and `close_ts`.
 
-### 8.2 `sampling` (`src/stgs/sampling.rs`)
+### 8.2 `pairmm_simple` (`src/stgs/pairmm_simple.rs`)
+
+Simplified pair market-making:
+
+- Same open/close flow as `pairmm`.
+- Removes factor-gating (`fdf`) and depth thresholding (`tlenu`).
+- Tick input only needs `ts`.
+
+### 8.3 `sampling` (`src/stgs/sampling.rs`)
 
 Time-based sampling strategy:
 
@@ -266,7 +275,7 @@ Time-based sampling strategy:
 - Every `sample_step` seconds it emits maker orders with `open_ranges`.
 - Close logic and order tracking mirrors `pairmm`.
 
-### 8.3 `sampling_v5` (`src/stgs/sampling_v5.rs`)
+### 8.4 `sampling_v5` (`src/stgs/sampling_v5.rs`)
 
 Signal-driven sampling:
 
@@ -279,7 +288,7 @@ Signal-driven sampling:
 
 Close logic mirrors `pairmm`.
 
-### 8.4 `sampling_v6` (`src/stgs/sampling_v6.rs`)
+### 8.5 `sampling_v6` (`src/stgs/sampling_v6.rs`)
 
 Adds cancel flags to `sampling_v5`:
 
