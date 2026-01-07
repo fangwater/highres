@@ -25,6 +25,7 @@ use log::{info, warn};
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
 use std::io::{self, BufRead};
+use std::path::Path;
 
 use crate::gconf::ENGIN_CONF;
 use crate::record::{write_to_csv, RecordDumpItem};
@@ -34,6 +35,7 @@ use crate::spending::{
 };
 use crate::symbolinfo::get_market;
 use crate::trade::{DepthInfo, TradeInfo};
+use zmq::Message as ZmqMessage;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "event")]
@@ -96,6 +98,75 @@ impl StreamState {
             }
         }
         self.tinfo.as_mut()
+    }
+}
+
+struct Args {
+    ipc: Option<String>,
+}
+
+fn parse_args() -> Args {
+    let mut ipc = None;
+    let mut iter = std::env::args().skip(1);
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--ipc" => ipc = iter.next(),
+            _ => {}
+        }
+    }
+    Args { ipc }
+}
+
+fn symbol_from_ipc_path(path: &str) -> Option<String> {
+    let file = Path::new(path).file_name()?.to_string_lossy();
+    let stem = Path::new(file.as_ref()).file_stem()?.to_string_lossy();
+    let symbol = stem.trim();
+    if symbol.is_empty() {
+        None
+    } else {
+        Some(symbol.to_string())
+    }
+}
+
+struct BinaryEvent {
+    event: u8,
+    side_id: u8,
+    is_snapshot: u8,
+    origin: u8,
+    ts_us: i64,
+    price: f64,
+    amount: f64,
+}
+
+fn decode_binary_event(msg: &ZmqMessage) -> Option<BinaryEvent> {
+    if msg.len() != 28 {
+        warn!("invalid ipc message length: {}", msg.len());
+        return None;
+    }
+    let buf = msg.as_ref();
+    Some(BinaryEvent {
+        event: buf[0],
+        side_id: buf[1],
+        is_snapshot: buf[2],
+        origin: buf[3],
+        ts_us: i64::from_le_bytes(buf[4..12].try_into().ok()?),
+        price: f64::from_le_bytes(buf[12..20].try_into().ok()?),
+        amount: f64::from_le_bytes(buf[20..28].try_into().ok()?),
+    })
+}
+
+fn origin_to_sid(origin: u8) -> Option<i32> {
+    if ENGIN_CONF.vsids.len() < 2 {
+        warn!("vsids length < 2, cannot map origin");
+        return None;
+    }
+    match origin {
+        0 => Some(ENGIN_CONF.vsids[0]),
+        1 => Some(ENGIN_CONF.vsids[1]),
+        _ => {
+            warn!("invalid origin {}, expected 0/1", origin);
+            None
+        }
     }
 }
 
@@ -275,19 +346,103 @@ fn handle_tick(tinfo: &mut TradeInfo, row: &StreamEvent) {
     do_tick(&v, tinfo);
 }
 
-fn main() {
-    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
+fn handle_binary_event(tinfo: &mut TradeInfo, event: BinaryEvent) {
+    match event.event {
+        1 => {
+            let sid = match origin_to_sid(event.origin) {
+                Some(v) => v,
+                None => return,
+            };
+            if !ENGIN_CONF.vsids.contains(&sid) {
+                warn!("ignore inc sid={}, not in vsids", sid);
+                return;
+            }
+            let v = vec![
+                event.ts_us as f64,
+                event.is_snapshot as f64,
+                event.side_id as f64,
+                event.price,
+                event.amount,
+                1.0,
+                sid as f64,
+            ];
+            lprocess::process(&v, tinfo);
+        }
+        2 => {
+            let sid = match origin_to_sid(event.origin) {
+                Some(v) => v,
+                None => return,
+            };
+            if !ENGIN_CONF.vsids.contains(&sid) {
+                warn!("ignore trade sid={}, not in vsids", sid);
+                return;
+            }
+            let v = vec![
+                event.ts_us as f64,
+                0.0,
+                event.side_id as f64,
+                event.price,
+                event.amount,
+                0.0,
+                sid as f64,
+            ];
+            tprocess::process(&v, tinfo);
+        }
+        3 => {
+            if ENGIN_CONF.vsids.len() < 2 {
+                warn!("tick ignored: vsids length < 2");
+                return;
+            }
+            let ts_s = event.ts_us as f64 / 1_000_000.0;
+            let v = vec![ts_s];
+            do_tick(&v, tinfo);
+        }
+        _ => {
+            warn!("invalid event type {}", event.event);
+        }
+    }
+}
 
-    if ENGIN_CONF.stg != "pairmm_simple" {
-        warn!(
-            "stream_pairmm is intended for pairmm_simple, stg={}",
-            ENGIN_CONF.stg
-        );
+fn run_ipc(ipc_path: &str, symbol: &str) {
+    let ctx = zmq::Context::new();
+    let socket = match ctx.socket(zmq::SUB) {
+        Ok(v) => v,
+        Err(err) => {
+            warn!("zmq create socket failed: {}", err);
+            return;
+        }
+    };
+    if let Err(err) = socket.set_subscribe(b"") {
+        warn!("zmq subscribe failed: {}", err);
+        return;
+    }
+    let endpoint = format!("ipc://{}", ipc_path);
+    if let Err(err) = socket.connect(&endpoint) {
+        warn!("zmq connect failed: {}", err);
+        return;
     }
 
-    stgs::pairmm_simple::clear_ongoing_pending();
-    clear_pending();
+    let mut state = StreamState::new();
+    loop {
+        let msg = match socket.recv_msg(0) {
+            Ok(v) => v,
+            Err(err) => {
+                warn!("zmq recv failed: {}", err);
+                break;
+            }
+        };
+        let Some(event) = decode_binary_event(&msg) else {
+            continue;
+        };
+        let tinfo = match state.get_tinfo(symbol) {
+            Some(v) => v,
+            None => continue,
+        };
+        handle_binary_event(tinfo, event);
+    }
+}
 
+fn run_stdin() {
     let stdin = io::stdin();
     let mut state = StreamState::new();
 
@@ -340,5 +495,31 @@ fn main() {
                 handle_trade(tinfo, &event);
             }
         }
+    }
+}
+
+fn main() {
+    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
+
+    if ENGIN_CONF.stg != "pairmm_simple" {
+        warn!(
+            "stream_pairmm is intended for pairmm_simple, stg={}",
+            ENGIN_CONF.stg
+        );
+    }
+
+    stgs::pairmm_simple::clear_ongoing_pending();
+    clear_pending();
+
+    let args = parse_args();
+    if let Some(ipc_path) = args.ipc {
+        let symbol = symbol_from_ipc_path(&ipc_path).unwrap_or_default();
+        if symbol.is_empty() {
+            warn!("ipc mode requires ipc path with symbol filename");
+            return;
+        }
+        run_ipc(&ipc_path, &symbol);
+    } else {
+        run_stdin();
     }
 }

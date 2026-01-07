@@ -605,6 +605,10 @@ pub fn get_close_decision(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision
                 }
                 let mid_m:f64 = (dinfo_m.bid1 + dinfo_m.ask1) / 2.;
                 if !dinfo_m.is_finish_snap  || mid_m == 0. {
+                    info!(
+                        "close skip sidc={} snap={} mid_m={}",
+                        citem.sidc, dinfo_m.is_finish_snap, mid_m
+                    );
                     continue
                 }
                 
@@ -821,212 +825,197 @@ pub fn get_open_decision(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>
     
     let ts = t[*COLS.get(&("ts".to_string())).unwrap()] as i64;
     // println!("============={}",ts);
-    let step =  PAIRMM_CONF.sample_step;
-    if ts % step == 0{
-        // println!("============={}",ts);
-        for sid in ENGIN_CONF.vsids.iter() {
-            let e_m = &ENGIN_CONF.sids[sid];
-            let market_m = get_market().get((e_m["exchange"].to_string()+":"+&e_m["etype"]+":"+&tinfo.symbol_std).as_str()).unwrap();
-            let dinfo_m:&DepthInfo = tinfo.depths.get(&sid).unwrap();
-            let pos_m:f64 = *tinfo.pos.get(&sid).unwrap();
+    let _step = PAIRMM_CONF.sample_step;
+    for sid in ENGIN_CONF.vsids.iter() {
+        let e_m = &ENGIN_CONF.sids[sid];
+        let market_m = get_market().get((e_m["exchange"].to_string()+":"+&e_m["etype"]+":"+&tinfo.symbol_std).as_str()).unwrap();
+        let dinfo_m:&DepthInfo = tinfo.depths.get(&sid).unwrap();
+        let pos_m:f64 = *tinfo.pos.get(&sid).unwrap();
 
-            let mut contract_value_m = 1.;
-            if e_m["etype"] == "swap"  && e_m["exchange"] == "okx" {
-                contract_value_m = market_m.contract_value.unwrap();
+        let mut contract_value_m = 1.;
+        if e_m["etype"] == "swap"  && e_m["exchange"] == "okx" {
+            contract_value_m = market_m.contract_value.unwrap();
+        }
+
+        let mid_m:f64 = (dinfo_m.bid1 + dinfo_m.ask1) / 2.;
+        let amount_hand_token = PAIRMM_CONF.amountu / contract_value_m / mid_m;
+        let upos_m:f64 = pos_m * contract_value_m * mid_m;
+        let gopenu = tinfo.open * mid_m;
+        if !dinfo_m.is_finish_snap || mid_m == 0. {
+            info!(
+                "open skip sidm={} snap={} mid_m={}",
+                sid, dinfo_m.is_finish_snap, mid_m
+            );
+            continue
+        }
+
+        //bid
+        for sidt in ENGIN_CONF.vsids.iter() {
+            if sid == sidt {
+                continue;
             }
 
-            let mid_m:f64 = (dinfo_m.bid1 + dinfo_m.ask1) / 2.;
-            let amount_hand_token = PAIRMM_CONF.amountu / contract_value_m / mid_m;
-            let upos_m:f64 = pos_m * contract_value_m * mid_m;
-            let gopenu = tinfo.open * mid_m;
-            if !dinfo_m.is_finish_snap || mid_m == 0. {
-                // println!("11==dinfo_m.is_finish_snap============={}",dinfo_m.is_finish_snap);
+            let e_t = &ENGIN_CONF.sids[sidt];
+            let market_t = get_market().get((e_t["exchange"].to_string()+":"+&e_t["etype"]+":"+&tinfo.symbol_std).as_str()).unwrap();
+            let dinfo_t:&DepthInfo = tinfo.depths.get(&sidt).unwrap();
+            let pos_t:f64 = *tinfo.pos.get(&sidt).unwrap();
+            let mut contract_value_t = 1.;
+            if e_t["etype"] == "swap"  && e_t["exchange"] == "okx" {
+                contract_value_t = market_t.contract_value.unwrap();
+            }
+
+            let mid_t:f64 = (dinfo_t.bid1 + dinfo_t.ask1) / 2.;
+
+            if !dinfo_t.is_finish_snap  || mid_t == 0. {
+                info!(
+                    "open skip sidm={} sidt={} snap_t={} mid_t={}",
+                    sid, sidt, dinfo_t.is_finish_snap, mid_t
+                );
                 continue
             }
 
-            //bid
+            let amount_hand_token = PAIRMM_CONF.amountu / contract_value_m / mid_m;
+            info!("sidt={} amt={} cv={}", sidt, amount_hand_token, contract_value_t);
+            let upos_t:f64 = pos_t * contract_value_t * mid_t;
 
-            for sidt in ENGIN_CONF.vsids.iter() {
-                if sid == sidt {
-                    continue;
-                }
-                
+            let mut is_open = true;
 
-                let e_t = &ENGIN_CONF.sids[sidt];
-                let market_t = get_market().get((e_t["exchange"].to_string()+":"+&e_t["etype"]+":"+&tinfo.symbol_std).as_str()).unwrap();
-                let dinfo_t:&DepthInfo = tinfo.depths.get(&sidt).unwrap();
-                let pos_t:f64 = *tinfo.pos.get(&sidt).unwrap();
-                let mut contract_value_t = 1.;
-                if e_t["etype"] == "swap"  && e_t["exchange"] == "okx" {
-                    contract_value_t = market_t.contract_value.unwrap();
-                }
+            let ranges_bid_prem = &PAIRMM_CONF.open_ranges;
+            // get_target_prem_by_ranges("buy", ranges_bids, f, is_open);
 
-                let mid_t:f64 = (dinfo_t.bid1 + dinfo_t.ask1) / 2.;
+            for range in ranges_bid_prem {
+                let ts = t[*COLS.get(&("ts".to_string())).unwrap()] as i64;
+                let fkey = "bid:".to_string()
+                    + &sid.to_string()
+                    + ":"
+                    + &sidt.to_string()
+                    + ":"
+                    + &range.to_string()
+                    + ":"
+                    + &ts.to_string();
+                let dupkey = "bid:".to_string()
+                    + &sid.to_string()
+                    + ":"
+                    + &sidt.to_string()
+                    + ":"
+                    + &range.to_string();
+                let curr_cid = COID_INC.fetch_add(1, Ordering::Relaxed);
+                let client_order_id = "op_obid".to_string()
+                    + ":"
+                    + &sid.to_string()
+                    + ":"
+                    + &sidt.to_string()
+                    + "_"
+                    + &range.to_string()
+                    + "_"
+                    + &curr_cid.to_string();
+                let bid_price:f64 = dinfo_m.bid1 * (1. - range);
 
-                if !dinfo_t.is_finish_snap  || mid_t == 0. {
-                    // println!("22===dinfo_m.is_finish_snap============={}",dinfo_m.is_finish_snap);
-                    continue
-                }
+                let tick_size = market_t.precision.tick_size;
+                let tick_size_keep = count_decimal_places(tick_size) as u32;
+                let rd = RoundingStrategy::ToZero;
+                let price_adj:f64 = adjust_price(bid_price, tick_size, tick_size_keep, true);
+                let pdec_bid = Decimal::from_str(&price_adj.to_string()).unwrap();
+                let bid_price_f = pdec_bid.round_dp_with_strategy(tick_size_keep, rd);
+                let bid_price_f64: f64 = bid_price_f.to_f64().unwrap();
 
-                let amount_hand_token = PAIRMM_CONF.amountu / contract_value_m / mid_m;
-                info!("sidt={} amt={} cv={}", sidt, amount_hand_token, contract_value_t);
-                let upos_t:f64 = pos_t * contract_value_t * mid_t;
-
-//                 let key = "f_".to_string() + &sid.to_string() + "_" + &sidt.to_string();
-//                 let f = t[*COLS.get(&key).unwrap()] as f64;
-
-//                 let ranges_bids = get_range_of_pstat(t[0] as i64, "bid", *sid);
-//                 let ranges_asks = get_range_of_pstat(t[0] as i64, "ask", *sid);
-                let mut is_open = true;
-
-                let ranges_bid_prem = &PAIRMM_CONF.open_ranges;
-                // get_target_prem_by_ranges("buy", ranges_bids, f, is_open);
-
-
-                for range in ranges_bid_prem {
-                    let ts = t[*COLS.get(&("ts".to_string())).unwrap()] as i64;
-                    let fkey = "bid:".to_string()
-                        + &sid.to_string()
-                        + ":"
-                        + &sidt.to_string()
-                        + ":"
-                        + &range.to_string()
-                        + ":"
-                        + &ts.to_string();
-                    let dupkey = "bid:".to_string()
-                        + &sid.to_string()
-                        + ":"
-                        + &sidt.to_string()
-                        + ":"
-                        + &range.to_string();
-                    let curr_cid = COID_INC.fetch_add(1, Ordering::Relaxed);
-                    let client_order_id = "op_obid".to_string()
-                        + ":"
-                        + &sid.to_string()
-                        + ":"
-                        + &sidt.to_string()
-                        + "_"
-                        + &range.to_string()
-                        + "_"
-                        + &curr_cid.to_string();
-                    let bid_price:f64 = dinfo_m.bid1 * (1. - range);
-
-                    let tick_size = market_t.precision.tick_size;
-                    let tick_size_keep = count_decimal_places(tick_size) as u32;
-                    let rd = RoundingStrategy::ToZero;
-                    let price_adj:f64 = adjust_price(bid_price, tick_size, tick_size_keep, true);
-                    let pdec_bid = Decimal::from_str(&price_adj.to_string()).unwrap();
-                    let bid_price_f = pdec_bid.round_dp_with_strategy(tick_size_keep, rd);
-                    let bid_price_f64: f64 = bid_price_f.to_f64().unwrap();
-
-                    tds.push(MakeDecision{create_ts:t[*COLS.get("ts").unwrap()] as i64,
-                        client_order_id:client_order_id, 
-                        max_order_keep_s:PAIRMM_CONF.max_open_order_keep_s as i32, 
-                        side:"buy".to_string(), 
-                        sid:*sid, 
-                        ttype:"maker".to_string(), 
-                        price:bid_price_f64, 
-                        amount:amount_hand_token, 
-                        from_key:fkey.to_string(),
-                        dup_key:dupkey.to_string(),
-                        target_sid:-1
-                    });
-                }
-
-            }
-
-            //ask
-            for sidt in ENGIN_CONF.vsids.iter() {
-                if sid == sidt {
-                    continue;
-                }
-
-
-                let e_t = &ENGIN_CONF.sids[sidt];
-                let market_t = get_market().get((e_t["exchange"].to_string()+":"+&e_t["etype"]+":"+&tinfo.symbol_std).as_str()).unwrap();
-                let dinfo_t:&DepthInfo = tinfo.depths.get(&sidt).unwrap();
-                let pos_t:f64 = *tinfo.pos.get(&sidt).unwrap();
-                let mut contract_value_t = 1.;
-                if e_t["etype"] == "swap"  && e_t["exchange"] == "okx" {
-                    // println!("33===dinfo_m.is_finish_snap============={}",dinfo_m.is_finish_snap);
-                    contract_value_t = market_t.contract_value.unwrap();
-                }
-
-                let mid_t:f64 = (dinfo_t.bid1 + dinfo_t.ask1) / 2.;
-                if !dinfo_t.is_finish_snap  || mid_t == 0. {
-                    // println!("44===dinfo_m.is_finish_snap============={}",dinfo_m.is_finish_snap);
-                    continue
-                }
-
-                let amount_hand_token = PAIRMM_CONF.amountu / contract_value_m / mid_m;
-                info!("sidt={} amt={} cv={}", sidt, amount_hand_token, contract_value_t);
-                let upos_t:f64 = pos_t * contract_value_t * mid_t;
-
-//                 let key = "f_".to_string() + &sid.to_string() + "_" + &sidt.to_string();
-//                 let f = t[*COLS.get(&key).unwrap()] as f64;
-
-//                 let ranges_bids = get_range_of_pstat(t[0] as i64, "bid", *sid);
-//                 let ranges_asks = get_range_of_pstat(t[0] as i64, "ask", *sid);
-
-                let mut is_open = true;
-
-                let ranges_ask_prem = &PAIRMM_CONF.open_ranges;
-                // get_target_prem_by_ranges("sell", ranges_asks, -f, is_open);
-                //TODO: must consider some leges are fullpos or broken
-
-                for range in ranges_ask_prem {
-                    let ts = t[*COLS.get(&("ts".to_string())).unwrap()] as i64;
-                    let fkey = "ask:".to_string()
-                        + &sid.to_string()
-                        + ":"
-                        + &sidt.to_string()
-                        + ":"
-                        + &range.to_string()
-                        + ":"
-                        + &ts.to_string();
-                    let dupkey = "ask:".to_string()
-                        + &sid.to_string()
-                        + ":"
-                        + &sidt.to_string()
-                        + ":"
-                        + &range.to_string();
-                    let curr_cid = COID_INC.fetch_add(1, Ordering::Relaxed);
-                    let client_order_id = "op_oask".to_string()
-                        + ":"
-                        + &sid.to_string()
-                        + ":"
-                        + &sidt.to_string()
-                        + "_"
-                        + &range.to_string()
-                        + "_"
-                        + &curr_cid.to_string();
-                    let ask_price:f64 = dinfo_m.ask1 * (1. + range);
-                    
-                    let tick_size = market_t.precision.tick_size;
-                    let tick_size_keep = count_decimal_places(tick_size) as u32;
-                    let ru = RoundingStrategy::AwayFromZero;                    
-                    let price_adj:f64 = adjust_price(ask_price, tick_size, tick_size_keep, false);
-                    let pdec_ask = Decimal::from_str(&price_adj.to_string()).unwrap();
-                    let ask_price_f = pdec_ask.round_dp_with_strategy(tick_size_keep, ru);
-                    let ask_price_f64: f64 = ask_price_f.to_f64().unwrap();
-                    
-                    tds.push(MakeDecision{create_ts:t[*COLS.get("ts").unwrap()] as i64,
-                        client_order_id:client_order_id, 
-                        max_order_keep_s:PAIRMM_CONF.max_open_order_keep_s as i32, 
-                        side:"sell".to_string(), 
-                        sid:*sid, 
-                        ttype:"maker".to_string(), 
-                        price:ask_price_f64, 
-                        amount:amount_hand_token, 
-                        from_key:fkey.to_string(),
-                        dup_key:dupkey.to_string(),
-                        target_sid:-1
-                    });
-                }
-
+                tds.push(MakeDecision{create_ts:t[*COLS.get("ts").unwrap()] as i64,
+                    client_order_id:client_order_id,
+                    max_order_keep_s:PAIRMM_CONF.max_open_order_keep_s as i32,
+                    side:"buy".to_string(),
+                    sid:*sid,
+                    ttype:"maker".to_string(),
+                    price:bid_price_f64,
+                    amount:amount_hand_token,
+                    from_key:fkey.to_string(),
+                    dup_key:dupkey.to_string(),
+                    target_sid:-1
+                });
             }
         }
-    
+
+        //ask
+        for sidt in ENGIN_CONF.vsids.iter() {
+            if sid == sidt {
+                continue;
+            }
+
+            let e_t = &ENGIN_CONF.sids[sidt];
+            let market_t = get_market().get((e_t["exchange"].to_string()+":"+&e_t["etype"]+":"+&tinfo.symbol_std).as_str()).unwrap();
+            let dinfo_t:&DepthInfo = tinfo.depths.get(&sidt).unwrap();
+            let pos_t:f64 = *tinfo.pos.get(&sidt).unwrap();
+            let mut contract_value_t = 1.;
+            if e_t["etype"] == "swap"  && e_t["exchange"] == "okx" {
+                // println!("33===dinfo_m.is_finish_snap============={}",dinfo_m.is_finish_snap);
+                contract_value_t = market_t.contract_value.unwrap();
+            }
+
+            let mid_t:f64 = (dinfo_t.bid1 + dinfo_t.ask1) / 2.;
+            if !dinfo_t.is_finish_snap  || mid_t == 0. {
+                // println!("44===dinfo_m.is_finish_snap============={}",dinfo_m.is_finish_snap);
+                continue
+            }
+
+            let amount_hand_token = PAIRMM_CONF.amountu / contract_value_m / mid_m;
+            info!("sidt={} amt={} cv={}", sidt, amount_hand_token, contract_value_t);
+            let upos_t:f64 = pos_t * contract_value_t * mid_t;
+
+            let mut is_open = true;
+
+            let ranges_ask_prem = &PAIRMM_CONF.open_ranges;
+            // get_target_prem_by_ranges("sell", ranges_asks, -f, is_open);
+            //TODO: must consider some leges are fullpos or broken
+
+            for range in ranges_ask_prem {
+                let ts = t[*COLS.get(&("ts".to_string())).unwrap()] as i64;
+                let fkey = "ask:".to_string()
+                    + &sid.to_string()
+                    + ":"
+                    + &sidt.to_string()
+                    + ":"
+                    + &range.to_string()
+                    + ":"
+                    + &ts.to_string();
+                let dupkey = "ask:".to_string()
+                    + &sid.to_string()
+                    + ":"
+                    + &sidt.to_string()
+                    + ":"
+                    + &range.to_string();
+                let curr_cid = COID_INC.fetch_add(1, Ordering::Relaxed);
+                let client_order_id = "op_oask".to_string()
+                    + ":"
+                    + &sid.to_string()
+                    + ":"
+                    + &sidt.to_string()
+                    + "_"
+                    + &range.to_string()
+                    + "_"
+                    + &curr_cid.to_string();
+                let ask_price:f64 = dinfo_m.ask1 * (1. + range);
+                
+                let tick_size = market_t.precision.tick_size;
+                let tick_size_keep = count_decimal_places(tick_size) as u32;
+                let ru = RoundingStrategy::AwayFromZero;
+                let price_adj:f64 = adjust_price(ask_price, tick_size, tick_size_keep, false);
+                let pdec_ask = Decimal::from_str(&price_adj.to_string()).unwrap();
+                let ask_price_f = pdec_ask.round_dp_with_strategy(tick_size_keep, ru);
+                let ask_price_f64: f64 = ask_price_f.to_f64().unwrap();
+                
+                tds.push(MakeDecision{create_ts:t[*COLS.get("ts").unwrap()] as i64,
+                    client_order_id:client_order_id,
+                    max_order_keep_s:PAIRMM_CONF.max_open_order_keep_s as i32,
+                    side:"sell".to_string(),
+                    sid:*sid,
+                    ttype:"maker".to_string(),
+                    price:ask_price_f64,
+                    amount:amount_hand_token,
+                    from_key:fkey.to_string(),
+                    dup_key:dupkey.to_string(),
+                    target_sid:-1
+                });
+            }
+        }
     }
         
     

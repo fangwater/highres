@@ -1,4 +1,4 @@
-use std::fs::{OpenOptions};
+use std::fs::{create_dir_all, OpenOptions};
 use serde::{Deserialize, Serialize};
 use crate::gconf::{ENGIN_CONF};
 use csv::{Writer,WriterBuilder};
@@ -35,8 +35,9 @@ pub struct TSRecordItem {
 
 
 pub fn write_to_csv(rd:&RecordDumpItem) {
-
-    let file_name = ENGIN_CONF.dump_path.to_string()+"/"+&rd.symbol+"_orders.csv";
+    let dir = ENGIN_CONF.dump_path.to_string();
+    let _ = create_dir_all(&dir);
+    let file_name = dir + "/" + &rd.symbol + "_orders.csv";
    // let mut csv_writer = Writer::from_path(file_name).expect("Failed to create CSV writer");
 
     let file = OpenOptions::new()
@@ -53,8 +54,9 @@ pub fn write_to_csv(rd:&RecordDumpItem) {
 
 
 pub fn write_to_csv_ts(rd:&TSRecordItem) {
-
-    let file_name = ENGIN_CONF.dump_path.to_string()+"/"+&rd.symbol+"_nps.csv";
+    let dir = ENGIN_CONF.dump_path.to_string();
+    let _ = create_dir_all(&dir);
+    let file_name = dir + "/" + &rd.symbol + "_nps.csv";
    // let mut csv_writer = Writer::from_path(file_name).expect("Failed to create CSV writer");
 
     let file = OpenOptions::new()
