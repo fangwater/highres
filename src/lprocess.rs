@@ -11,7 +11,7 @@ const COL_PRICE: usize  = 3;
 const COL_AMOUNT: usize = 4;
 // const COL_TID: usize = 5;
 const COL_SID: usize    = 6;
-use crate::gconf::{ENGIN_CONF}; 
+use crate::gconf::{ENGIN_CONF, PAIRMM_CONF}; 
 
 pub fn pending_adjust(sid:i32, side:&str, price:f64, mut delta_amount:f64, amount_in_price:f64) {
     if side == "bid" {
@@ -172,6 +172,11 @@ pub fn process(v:&Vec<f64>, tinfo:&mut TradeInfo) {
     let dinfo:&mut DepthInfo = tinfo.depths.get_mut(&sid).unwrap();
     let price = v[COL_PRICE];
     let amount = v[COL_AMOUNT];
+    let ts_s = (v[0] / 1_000_000.0) as i64;
+
+    if v[COL_IS] != 1. && dinfo.first_inc_ts_s == 0 {
+        dinfo.first_inc_ts_s = ts_s;
+    }
     
     if v[COL_IS] == 1. {
         //build snap
@@ -258,6 +263,20 @@ pub fn process(v:&Vec<f64>, tinfo:&mut TradeInfo) {
         } 
     } 
     
+    if !dinfo.is_finish_snap {
+        let warmup_s = PAIRMM_CONF.open_snapshot_warmup_s;
+        if warmup_s > 0
+            && dinfo.first_inc_ts_s > 0
+            && ts_s - dinfo.first_inc_ts_s >= warmup_s
+            && (ENGIN_CONF.stg == "pairmm_simple" || ENGIN_CONF.stg == "pairmm")
+        {
+            if !dinfo.bids.is_empty() && !dinfo.asks.is_empty() {
+                dinfo.is_finish_snap = true;
+                dinfo.is_snaping = false;
+            }
+        }
+    }
+
     if dinfo.is_finish_snap {
         if let Some((first_key, _first_value)) = dinfo.asks.first_key_value() {
             dinfo.ask1 = first_key.into_inner();
@@ -268,5 +287,3 @@ pub fn process(v:&Vec<f64>, tinfo:&mut TradeInfo) {
         //info!("dinfo sid={}({} {})  bid1={:?} ask1={:?}", sid, v[COL_PRICE], v[COL_AMOUNT], dinfo.bid1, dinfo.ask1);
     } 
 }
-
-

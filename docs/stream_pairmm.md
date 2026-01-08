@@ -6,7 +6,6 @@
 
 部署目录下需要包含：
 - `highres.toml`
-- `log4rs.yaml`
 
 `stream_pairmm` 会在当前工作目录读取 `highres.toml`。
 
@@ -54,4 +53,4 @@ max_close_order_keep_s = 30
 
 ## 5. 日志
 
-`log4rs.yaml` 控制日志输出，默认日志目录为 `logs/`。
+`stream_pairmm` 输出到 stdout/stderr，建议通过 PM2 收集日志（`pm2 logs`）。

@@ -43,6 +43,7 @@ tlenu = 10000.0 #当前价格挂单的价格
 fdf = -0.0002 #fdf 的开仓值
 is_opne_price_gap_ratio = false #open 订单是否 订单和盘口的距离 撤单
 opne_price_gap_ratio = 0.003   #open 每一秒计算订单和盘口的距离, 当距离大于 0.3%（可配置）的时候撤单
+open_snapshot_warmup_s = 1800  #首次 inc 后超过该秒数允许跳过 snapshot 检查（0 表示不跳过）
 
 #V5
 opne_sid = 0 #双所时间序列回测:只做okx_swap开仓，binanceswap平仓

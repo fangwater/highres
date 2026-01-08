@@ -50,6 +50,8 @@ pub struct PairmmConf {
     pub opne_price_gap_ratio:f64,
     pub opne_sid:i32,
     pub max_pos_u:f64,
+    #[serde(default = "default_open_snapshot_warmup_s")]
+    pub open_snapshot_warmup_s:i64,
     
 }
 
@@ -109,6 +111,10 @@ lazy_static! {
     };
 }
 
+fn default_open_snapshot_warmup_s() -> i64 {
+    30 * 60
+}
+
 pub fn load_config_aenginconf(config_file: &str) -> Result<EnginConf, ConfigError> {
     let mut settings = Config::new();
 
@@ -164,5 +170,4 @@ pub fn load_config_nmtconf(config_file: &str) -> Result<NmtConf, ConfigError> {
     let engin_conf: NmtConf = engin.try_into().unwrap();
     Ok(engin_conf)
 }
-
 

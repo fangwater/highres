@@ -28,7 +28,7 @@ use std::io::{self, BufRead};
 use std::path::Path;
 
 use crate::gconf::ENGIN_CONF;
-use crate::record::{write_to_csv, RecordDumpItem};
+use crate::record::{init_record_pub_from_market_ipc, write_to_csv, RecordDumpItem};
 use crate::ordertake::add_taking;
 use crate::spending::{
     add_pending, clear_pending, drop_pending, S_PENDING_PRICEKEY_ASKS, S_PENDING_PRICEKEY_BIDS,
@@ -499,7 +499,10 @@ fn run_stdin() {
 }
 
 fn main() {
-    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "info");
+    }
+    env_logger::init();
 
     if ENGIN_CONF.stg != "pairmm_simple" {
         warn!(
@@ -513,6 +516,7 @@ fn main() {
 
     let args = parse_args();
     if let Some(ipc_path) = args.ipc {
+        init_record_pub_from_market_ipc(&ipc_path);
         let symbol = symbol_from_ipc_path(&ipc_path).unwrap_or_default();
         if symbol.is_empty() {
             warn!("ipc mode requires ipc path with symbol filename");

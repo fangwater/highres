@@ -1,4 +1,5 @@
 use log::{info};
+use chrono::{TimeZone, Utc};
 use std::collections::HashMap;
 use super::super::trade::{TradeInfo, DepthInfo, MakeDecision, CancelDecision};
 use crate::gconf::{ENGIN_CONF,PAIRMM_CONF};
@@ -18,7 +19,6 @@ use rust_decimal::Decimal;
 use std::str::FromStr;
 use rust_decimal::prelude::*;
 use csv::ReaderBuilder;
-
 #[derive(Debug)]
 pub struct CITEM {
     //pub sidc:i32,
@@ -837,14 +837,16 @@ pub fn get_open_decision(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>
             contract_value_m = market_m.contract_value.unwrap();
         }
 
+        let warmup_s = PAIRMM_CONF.open_snapshot_warmup_s;
         let mid_m:f64 = (dinfo_m.bid1 + dinfo_m.ask1) / 2.;
         let amount_hand_token = PAIRMM_CONF.amountu / contract_value_m / mid_m;
         let upos_m:f64 = pos_m * contract_value_m * mid_m;
         let gopenu = tinfo.open * mid_m;
         if !dinfo_m.is_finish_snap || mid_m == 0. {
+            let warmup_left_m = snapshot_warmup_left(ts, dinfo_m, warmup_s);
             info!(
-                "open skip sidm={} snap={} mid_m={}",
-                sid, dinfo_m.is_finish_snap, mid_m
+                "open skip sidm={} snap={} warmup_left_s={} mid_m={}",
+                sid, dinfo_m.is_finish_snap, warmup_left_m, mid_m
             );
             continue
         }
@@ -865,11 +867,11 @@ pub fn get_open_decision(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>
             }
 
             let mid_t:f64 = (dinfo_t.bid1 + dinfo_t.ask1) / 2.;
-
-            if !dinfo_t.is_finish_snap  || mid_t == 0. {
+            if !dinfo_t.is_finish_snap || mid_t == 0. {
+                let warmup_left_t = snapshot_warmup_left(ts, dinfo_t, warmup_s);
                 info!(
-                    "open skip sidm={} sidt={} snap_t={} mid_t={}",
-                    sid, sidt, dinfo_t.is_finish_snap, mid_t
+                    "open skip sidm={} sidt={} snap_t={} warmup_left_s={} mid_t={}",
+                    sid, sidt, dinfo_t.is_finish_snap, warmup_left_t, mid_t
                 );
                 continue
             }
@@ -1025,6 +1027,29 @@ pub fn get_open_decision(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>
 
 }
 
+fn snapshot_warmup_left(ts_s: i64, dinfo: &DepthInfo, warmup_s: i64) -> i64 {
+    if warmup_s <= 0 {
+        return 0;
+    }
+    let first_ts = dinfo.first_inc_ts_s;
+    if first_ts <= 0 {
+        return warmup_s;
+    }
+    let elapsed = ts_s - first_ts;
+    if elapsed >= warmup_s {
+        0
+    } else {
+        warmup_s - elapsed
+    }
+}
+
+fn tick_tp_utc(ts_s: i64) -> String {
+    match Utc.timestamp_opt(ts_s, 0).single() {
+        Some(dt) => dt.format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+        None => format!("invalid_ts_s={}", ts_s),
+    }
+}
+
 pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
     
     let pairpos_item_u = 50. * PAIRMM_CONF.amountu;
@@ -1032,6 +1057,9 @@ pub fn make(t:&Vec<f64>, tinfo:&mut TradeInfo) -> Vec<MakeDecision>{
     let max_pending_pair = 1;
     let max_ongoing = 5;
     let ts = t[0];
+    let ts_s = ts as i64;
+    let tp_utc = tick_tp_utc(ts_s);
+    info!("tick signal tp_utc={} ts_s={}", tp_utc, ts_s);
     let mut tds:Vec<MakeDecision> = Vec::new();
     
     //sample_onging(t, tinfo);

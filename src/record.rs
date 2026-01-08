@@ -1,7 +1,39 @@
 use std::fs::{create_dir_all, OpenOptions};
+use std::path::Path;
+use std::sync::Arc;
+
+use log::warn;
+use once_cell::sync::OnceCell;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use crate::gconf::{ENGIN_CONF};
-use csv::{Writer,WriterBuilder};
+
+use crate::gconf::ENGIN_CONF;
+use csv::WriterBuilder;
+
+const MARKET_IPC_PREFIX: &str = "/tmp/mth_pubs/";
+const RECORD_IPC_PREFIX: &str = "/tmp/mth_pubs/stream_pairmm/";
+
+struct RecordPublisher {
+    _ctx: Arc<zmq::Context>,
+    socket: zmq::Socket,
+}
+
+impl RecordPublisher {
+    fn new(endpoint: &str) -> Result<Self, zmq::Error> {
+        let ctx = Arc::new(zmq::Context::new());
+        let socket = ctx.socket(zmq::PUB)?;
+        socket.bind(endpoint)?;
+        Ok(Self { _ctx: ctx, socket })
+    }
+
+    fn send(&self, topic: &[u8], payload: &[u8]) -> Result<(), zmq::Error> {
+        self.socket.send(topic, zmq::SNDMORE)?;
+        self.socket.send(payload, 0)?;
+        Ok(())
+    }
+}
+
+static RECORD_PUB: OnceCell<Mutex<RecordPublisher>> = OnceCell::new();
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,7 +56,7 @@ pub struct RecordDumpItem {
     pub ask1:f64
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TSRecordItem {
     pub create_ts:i64,
     pub symbol:String,
@@ -33,8 +65,54 @@ pub struct TSRecordItem {
     pub open:f64,
 }
 
+pub fn init_record_pub_from_market_ipc(market_ipc: &str) {
+    if RECORD_PUB.get().is_some() {
+        return;
+    }
+    let record_path = match record_path_from_market_ipc(market_ipc) {
+        Some(path) => path,
+        None => {
+            warn!("record pub ipc path invalid: {}", market_ipc);
+            return;
+        }
+    };
+    if let Err(err) = init_record_pub(&record_path) {
+        warn!("record pub init failed: {} err={}", record_path, err);
+    }
+}
+
+fn record_path_from_market_ipc(market_ipc: &str) -> Option<String> {
+    if !market_ipc.starts_with(MARKET_IPC_PREFIX) {
+        return None;
+    }
+    let rest = &market_ipc[MARKET_IPC_PREFIX.len()..];
+    Some(format!("{}{}", RECORD_IPC_PREFIX, rest))
+}
+
+fn init_record_pub(ipc_path: &str) -> Result<(), zmq::Error> {
+    let endpoint = if ipc_path.starts_with("ipc://") {
+        ipc_path.to_string()
+    } else {
+        format!("ipc://{}", ipc_path)
+    };
+    let ipc_fs_path = endpoint.strip_prefix("ipc://").unwrap_or(&endpoint);
+    if let Some(parent) = Path::new(ipc_fs_path).parent() {
+        let _ = create_dir_all(parent);
+    }
+    let publisher = RecordPublisher::new(&endpoint)?;
+    let _ = RECORD_PUB.set(Mutex::new(publisher));
+    Ok(())
+}
 
 pub fn write_to_csv(rd:&RecordDumpItem) {
+    if let Some(publisher) = RECORD_PUB.get() {
+        if let Ok(payload) = serde_json::to_vec(rd) {
+            if publisher.lock().send(b"orders", &payload).is_ok() {
+                return;
+            }
+        }
+        warn!("record pub send failed, fallback to csv");
+    }
     let dir = ENGIN_CONF.dump_path.to_string();
     let _ = create_dir_all(&dir);
     let file_name = dir + "/" + &rd.symbol + "_orders.csv";
@@ -43,7 +121,7 @@ pub fn write_to_csv(rd:&RecordDumpItem) {
     let file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(file_name)
+        .open(&file_name)
         .unwrap();
 
     let mut csv_writer = WriterBuilder::new().from_writer(file);
@@ -54,6 +132,14 @@ pub fn write_to_csv(rd:&RecordDumpItem) {
 
 
 pub fn write_to_csv_ts(rd:&TSRecordItem) {
+    if let Some(publisher) = RECORD_PUB.get() {
+        if let Ok(payload) = serde_json::to_vec(rd) {
+            if publisher.lock().send(b"nps", &payload).is_ok() {
+                return;
+            }
+        }
+        warn!("record pub send failed, fallback to csv");
+    }
     let dir = ENGIN_CONF.dump_path.to_string();
     let _ = create_dir_all(&dir);
     let file_name = dir + "/" + &rd.symbol + "_nps.csv";

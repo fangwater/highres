@@ -5,7 +5,7 @@ appenders:
     kind: rolling_file
     path: "logs/app.log"
     encoder:
-      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{h({l})}] {M} [{f}:{L}] {m}{n}"
+      pattern: "{d(%Y-%m-%d %H:%M:%S%.3f)} [{h({l})}] {m}{n}"
     policy:
       trigger:
         kind: size

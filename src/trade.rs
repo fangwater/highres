@@ -11,6 +11,7 @@ pub struct DepthInfo {
     pub etype:String,
     pub is_snaping:bool,
     pub is_finish_snap:bool,
+    pub first_inc_ts_s:i64,
     pub bids:BTreeMap<OrderedFloat<f64>, f64>,
     pub asks:BTreeMap<OrderedFloat<f64>, f64>,
     pub bid1:f64,
@@ -34,7 +35,7 @@ impl TradeInfo {
         let mut pos:HashMap<i32,f64> = HashMap::new();
         
         for (sid, sinfo) in sids.iter() {
-            let dinfo = DepthInfo {sid:*sid, exchange:sinfo["exchange"].to_string(), etype:sinfo["etype"].to_string(), is_snaping:false, is_finish_snap:false, bids:BTreeMap::new(), asks:BTreeMap::new(), bid1:0., ask1:0.};
+            let dinfo = DepthInfo {sid:*sid, exchange:sinfo["exchange"].to_string(), etype:sinfo["etype"].to_string(), is_snaping:false, is_finish_snap:false, first_inc_ts_s:0, bids:BTreeMap::new(), asks:BTreeMap::new(), bid1:0., ask1:0.};
             depths.insert(*sid, dinfo);
             pos.insert(*sid, 0.);
         }
