@@ -66,6 +66,7 @@ done
 
 NAME="${NAME_OVERRIDE:-stream_pairmm_record}"
 NAMESPACE="$(basename "${BASE_DIR}")"
+DEFAULT_DB_ROOT="/mnt/data"
 
 BIN_CANDIDATES=(
   "${BASE_DIR}/stream_pairmm_record"
@@ -86,12 +87,13 @@ if [[ -z "$BIN_PATH" ]]; then
 fi
 
 ARGS=()
+if [[ -z "$DB_ROOT" ]]; then
+  DB_ROOT="$DEFAULT_DB_ROOT"
+fi
 if [[ -n "$IPC_PREFIX" ]]; then
   ARGS+=(--ipc-prefix "$IPC_PREFIX")
 fi
-if [[ -n "$DB_ROOT" ]]; then
-  ARGS+=(--db-root "$DB_ROOT")
-fi
+ARGS+=(--db-root "$DB_ROOT")
 
 echo "[INFO] Restarting ${NAME}"
 pm2 delete "$NAME" --namespace "$NAMESPACE" >/dev/null 2>&1 || true

@@ -79,7 +79,7 @@ if [[ "$ALL" != "true" && -z "$SYMBOL" ]]; then
 fi
 
 if [[ -z "$OUT_DIR" ]]; then
-  OUT_DIR="${BASE_DIR}/order_data"
+  OUT_DIR="/mnt/data/order_data"
 fi
 
 BIN_CANDIDATES=(
@@ -103,12 +103,10 @@ fi
 mkdir -p "$OUT_DIR"
 
 ARGS=()
-if [[ "$ALL" == "true" && -z "$DB_ROOT" ]]; then
-  DB_ROOT="${BASE_DIR}/data/record_persist/pairmm/okex-futures-binance-futures"
+if [[ -z "$DB_ROOT" ]]; then
+  DB_ROOT="/mnt/data"
 fi
-if [[ -n "$DB_ROOT" ]]; then
-  ARGS+=(--db-root "$DB_ROOT")
-fi
+ARGS+=(--db-root "$DB_ROOT")
 
 if [[ "$ALL" == "true" ]]; then
   if [[ ! -d "$DB_ROOT" ]]; then
