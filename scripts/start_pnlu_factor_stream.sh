@@ -7,11 +7,11 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  start_stream_pairmm_record.sh [--name <pm2_name>] [--ipc-prefix <ipc>] [--db-root <path>]
+  start_pnlu_factor_stream.sh [--name <pm2_name>] [--ipc-prefix <ipc>] [--db-root <path>] [--config <path>]
 
 Examples:
-  ./scripts/start_stream_pairmm_record.sh
-  ./scripts/start_stream_pairmm_record.sh --name stream_pairmm_record
+  ./scripts/start_pnlu_factor_stream.sh
+  ./scripts/start_pnlu_factor_stream.sh --ipc-prefix /tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures
 EOF
 }
 
@@ -23,6 +23,7 @@ fi
 NAME_OVERRIDE=""
 IPC_PREFIX=""
 DB_ROOT=""
+CONFIG_PATH=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --name)
@@ -52,6 +53,15 @@ while [[ $# -gt 0 ]]; do
       fi
       shift 2
       ;;
+    --config)
+      CONFIG_PATH="${2:-}"
+      if [[ -z "$CONFIG_PATH" ]]; then
+        echo "[ERROR] --config requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -64,13 +74,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-NAME="${NAME_OVERRIDE:-stream_pairmm_record}"
+NAME="${NAME_OVERRIDE:-pnlu_factor_stream}"
 NAMESPACE="$(basename "${BASE_DIR}")"
-DEFAULT_DB_ROOT="/mnt/data/data/record_persist/pairmm/okex-futures-binance-futures"
 
 BIN_CANDIDATES=(
-  "${BASE_DIR}/stream_pairmm_record"
-  "${BASE_DIR}/target/release/stream_pairmm_record"
+  "${BASE_DIR}/pnlu_factor_stream"
+  "${BASE_DIR}/target/release/pnlu_factor_stream"
 )
 
 BIN_PATH=""
@@ -82,18 +91,20 @@ for cand in "${BIN_CANDIDATES[@]}"; do
 done
 
 if [[ -z "$BIN_PATH" ]]; then
-  echo "[ERROR] stream_pairmm_record binary not found. Build first with: cargo build --release --bin stream_pairmm_record" >&2
+  echo "[ERROR] pnlu_factor_stream binary not found. Build first with: cargo build --release --bin pnlu_factor_stream" >&2
   exit 1
 fi
 
 ARGS=()
-if [[ -z "$DB_ROOT" ]]; then
-  DB_ROOT="$DEFAULT_DB_ROOT"
-fi
 if [[ -n "$IPC_PREFIX" ]]; then
   ARGS+=(--ipc-prefix "$IPC_PREFIX")
 fi
-ARGS+=(--db-root "$DB_ROOT")
+if [[ -n "$DB_ROOT" ]]; then
+  ARGS+=(--db-root "$DB_ROOT")
+fi
+if [[ -n "$CONFIG_PATH" ]]; then
+  ARGS+=(--config "$CONFIG_PATH")
+fi
 
 echo "[INFO] Restarting ${NAME}"
 pm2 delete "$NAME" --namespace "$NAMESPACE" >/dev/null 2>&1 || true

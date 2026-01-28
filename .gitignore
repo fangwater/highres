@@ -3,6 +3,4 @@ data/
 logs/
 target/
 __pycache__/
-ETHUSDT_orders.csv
-ETHUSDT_orders_stream_noroll.csv
-ETHUSDT_orders_stream_noroll_90m.csv
+*.csv

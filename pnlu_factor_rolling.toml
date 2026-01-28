@@ -1,0 +1,7 @@
+csv_dir = "/mnt/data/pnlu_factor_replay"
+ipc_prefix = "ipc:///tmp/mth_pubs/pnlu_factor.ipc"
+reload_sec = 5
+symbols_config = "pnlu_factor_rolling_symbols.json"
+log_factor_thresholds = true
+redis_url = "redis://54.64.147.69:4190/0"
+redis_key = "_pnlu_factor_thresholds"

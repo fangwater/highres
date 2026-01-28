@@ -1,0 +1,7 @@
+{
+  "default": {
+    "rolling_window": 100000,
+    "min_periods": 10000,
+    "quantiles": [0.7]
+  }
+}

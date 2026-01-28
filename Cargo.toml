@@ -2,6 +2,7 @@
 name = "sampling_v6"
 version = "0.1.0"
 edition = "2021"
+autobins = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -31,4 +32,38 @@ rust_decimal = "1.23.0"
 csv = "1.1.6"
 zmq = "0.10"
 rocksdb = { version = "0.21", default-features = false, features = ["lz4"] }
+redis = "0.25"
 
+[features]
+mock-v6 = []
+stream-v6 = []
+
+[[bin]]
+name = "mock_v6"
+path = "src/bin/mock_v6.rs"
+required-features = ["mock-v6"]
+
+[[bin]]
+name = "stream_v6"
+path = "src/bin/stream_v6.rs"
+required-features = ["stream-v6"]
+
+[[bin]]
+name = "stream_pairmm"
+path = "src/bin/stream_pairmm.rs"
+
+[[bin]]
+name = "stream_pairmm_record"
+path = "src/bin/stream_pairmm_record.rs"
+
+[[bin]]
+name = "pnlu_factor_stream"
+path = "src/bin/pnlu_factor_stream.rs"
+
+[[bin]]
+name = "pnlu_factor_replay"
+path = "src/bin/pnlu_factor_replay.rs"
+
+[[bin]]
+name = "pnlu_factor_rolling_metrics"
+path = "src/bin/pnlu_factor_rolling_metrics.rs"

@@ -104,11 +104,14 @@ mkdir -p "$OUT_DIR"
 
 ARGS=()
 if [[ -z "$DB_ROOT" ]]; then
-  DB_ROOT="/mnt/data"
+  DB_ROOT="/mnt/data/data/record_persist/pairmm/okex-futures-binance-futures"
 fi
 ARGS+=(--db-root "$DB_ROOT")
 
 if [[ "$ALL" == "true" ]]; then
+  echo "[INFO] Export all symbols"
+  echo "[INFO] DB root: ${DB_ROOT}"
+  echo "[INFO] Out dir: ${OUT_DIR}"
   if [[ ! -d "$DB_ROOT" ]]; then
     echo "[ERROR] db root not found: $DB_ROOT" >&2
     exit 1
@@ -121,6 +124,7 @@ if [[ "$ALL" == "true" ]]; then
     SYMBOL="$(basename "$sym_dir")"
     ORDERS_OUT="${OUT_DIR}/${SYMBOL}_orders.csv"
     NPS_OUT="${OUT_DIR}/${SYMBOL}_nps.csv"
+    echo "[INFO] Exporting ${SYMBOL}"
     "$BIN_PATH" --export --symbol "$SYMBOL" --kind orders --out "$ORDERS_OUT" "${ARGS[@]}"
     "$BIN_PATH" --export --symbol "$SYMBOL" --kind nps --out "$NPS_OUT" "${ARGS[@]}"
     echo "[INFO] Exported ${SYMBOL}:"
