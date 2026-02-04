@@ -66,6 +66,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="scan redis keys by suffix and print all matches",
     )
+    p.add_argument(
+        "--full",
+        action="store_true",
+        help="print full JSON payload per symbol (one block per key)",
+    )
+    p.add_argument(
+        "--raw",
+        action="store_true",
+        help="print raw redis value (bytes/str) before decoding JSON",
+    )
     return p.parse_args()
 
 
@@ -108,6 +118,21 @@ def format_ts(value: Any) -> str:
     if ts <= 0:
         return ""
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def decode_raw_value(raw: Any) -> tuple[str, bytes]:
+    if isinstance(raw, bytes):
+        return raw.decode("utf-8", "ignore"), raw
+    if isinstance(raw, str):
+        return raw, raw.encode("utf-8", "ignore")
+    text = str(raw)
+    return text, text.encode("utf-8", "ignore")
+
+
+def print_raw_value(symbol: str, raw_bytes: bytes) -> None:
+    hex_str = raw_bytes.hex()
+    print(f"[{symbol}] raw_bytes_len={len(raw_bytes)}")
+    print(hex_str)
 
 
 def print_three_line_table(headers: List[str], rows: List[List[str]]) -> None:
@@ -191,26 +216,34 @@ def main() -> int:
         if raw is None:
             missing.append(symbol)
             continue
-        if isinstance(raw, bytes):
-            raw = raw.decode("utf-8", "ignore")
+        raw_text, raw_bytes = decode_raw_value(raw)
+        if args.raw:
+            print_raw_value(symbol, raw_bytes)
         try:
-            payload = json.loads(raw)
+            payload = json.loads(raw_text)
         except Exception:
-            rows.append([symbol, "", "", "", "invalid_json"])
+            if args.full:
+                print(f"[{symbol}] invalid_json")
+            else:
+                rows.append([symbol, "", "", "", "invalid_json"])
             continue
-        rows.append(
-            [
-                symbol,
-                format_ts(payload.get("ts")),
-                format_ts(payload.get("target_ts")),
-                format_float(payload.get("factor")),
-                format_list(payload.get("quantiles")),
-                format_list(payload.get("thresholds")),
-                str(payload.get("ready", "")),
-            ]
-        )
+        if args.full:
+            print(f"[{symbol}]")
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            rows.append(
+                [
+                    symbol,
+                    format_ts(payload.get("ts")),
+                    format_ts(payload.get("target_ts")),
+                    format_float(payload.get("factor")),
+                    format_list(payload.get("quantiles")),
+                    format_list(payload.get("thresholds")),
+                    str(payload.get("ready", "")),
+                ]
+            )
 
-    if rows:
+    if rows and not args.full:
         print_three_line_table(headers, rows)
     if missing:
         print(f"\nMissing: {', '.join(missing)}")
