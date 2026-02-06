@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::error::Error;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, Instant, SystemTime};
 
 use config::{Config, File};
@@ -19,7 +19,6 @@ struct SymbolConfigPartial {
     rolling_window: Option<usize>,
     min_periods: Option<usize>,
     quantiles: Option<Vec<f64>>,
-    csv_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -30,11 +29,11 @@ struct SymbolConfigFile {
 
 #[derive(Debug, Clone, Deserialize)]
 struct ProcessConfigFile {
-    csv_dir: Option<String>,
     ipc_prefix: Option<String>,
     reload_sec: Option<u64>,
     symbols_config: Option<String>,
     log_factor_thresholds: Option<bool>,
+    log_redis_write_success: Option<bool>,
     redis_url: Option<String>,
     redis_key: Option<String>,
 }
@@ -44,7 +43,6 @@ struct SymbolConfig {
     rolling_window: usize,
     min_periods: usize,
     quantiles: Vec<f64>,
-    csv_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -110,7 +108,6 @@ fn default_partial(cfg: &SymbolConfigFile) -> SymbolConfigPartial {
         rolling_window: Some(100000),
         min_periods: Some(10000),
         quantiles: Some(vec![0.1, 0.5, 0.9]),
-        csv_path: None,
     })
 }
 
@@ -148,16 +145,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         .unwrap_or_else(|| DEFAULT_SYMBOL_CONFIG.to_string());
     let reload_sec = process_cfg.reload_sec.unwrap_or(DEFAULT_RELOAD_SEC).max(1);
     let log_factor_thresholds = process_cfg.log_factor_thresholds.unwrap_or(false);
+    let log_redis_write_success = process_cfg.log_redis_write_success.unwrap_or(false);
     let redis_url = process_cfg.redis_url.clone().unwrap_or_default();
     let redis_key = process_cfg
         .redis_key
         .clone()
         .unwrap_or_else(|| "_pnlu_factor_thresholds".to_string());
     let ipc_prefix = process_cfg.ipc_prefix.clone().unwrap_or_default();
-    let csv_dir = process_cfg
-        .csv_dir
-        .clone()
-        .unwrap_or_else(|| "/mnt/data/pnlu_factor_replay".to_string());
 
     let mut cfg = load_symbol_config(&symbols_config_path)?;
     let all_symbols = load_online_symbols()?;
@@ -170,16 +164,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         info!("symbols config expanded {}", symbols_config_path);
     }
     info!(
-        "rolling-metrics config symbols={} ipc_endpoint={} reload_sec={} csv_dir={} symbols_config={}",
+        "rolling-metrics config symbols={} ipc_endpoint={} reload_sec={} symbols_config={} log_redis_write_success={}",
         all_symbols.len(),
         ipc_prefix,
         reload_sec,
-        csv_dir,
-        symbols_config_path
+        symbols_config_path,
+        log_redis_write_success
     );
 
-    let mut states = init_states(&cfg, &all_symbols, &csv_dir)?;
-    warmup_from_csv(&mut states)?;
+    let mut states = init_states(&cfg, &all_symbols)?;
 
     if ipc_prefix.trim().is_empty() {
         return Err("ipc_prefix is required for pnlu_factor_rolling_metrics".into());
@@ -257,8 +250,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                     if log_factor_thresholds {
                         info!("{}", payload);
                     }
-                    if let Err(err) = redis_writer.write_json(&msg.symbol, &payload) {
-                        warn!("redis write failed: {}", err);
+                    match redis_writer.write_json(&msg.symbol, &payload) {
+                        Ok(_) => {
+                            if log_redis_write_success {
+                                let key = format!("{}{}", msg.symbol, redis_key);
+                                info!(
+                                    "redis write ok key={} symbol={} ts={:?} target_ts={:?}",
+                                    key, msg.symbol, msg.ts, msg.target_ts
+                                );
+                            }
+                        }
+                        Err(err) => {
+                            warn!("redis write failed: {}", err);
+                        }
                     }
                 }
             }
@@ -287,7 +291,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 new_cfg,
                                 &mut states,
                                 &all_symbols,
-                                &csv_dir,
                             )?;
                             info!("reloaded config {}", symbols_config_path);
                         }
@@ -345,13 +348,12 @@ fn validate_overrides(
 fn init_states(
     cfg: &SymbolConfigFile,
     symbols: &[String],
-    csv_dir: &str,
 ) -> Result<HashMap<String, SymbolState>, Box<dyn Error>> {
     let mut states = HashMap::new();
     let overrides = cfg.symbols.as_ref();
     for symbol in symbols.iter() {
         let partial = overrides.and_then(|map| map.get(symbol));
-        let config = build_symbol_config(cfg, csv_dir, symbol, partial);
+        let config = build_symbol_config(cfg, partial);
         states.insert(
             symbol.to_string(),
             SymbolState {
@@ -367,15 +369,12 @@ fn init_states(
 
 fn build_symbol_config(
     cfg: &SymbolConfigFile,
-    csv_dir: &str,
-    symbol: &str,
     partial: Option<&SymbolConfigPartial>,
 ) -> SymbolConfig {
     let default = cfg.default.clone().unwrap_or(SymbolConfigPartial {
         rolling_window: Some(100000),
         min_periods: Some(10000),
         quantiles: Some(vec![0.1, 0.5, 0.9]),
-        csv_path: None,
     });
     let rolling_window = partial
         .and_then(|v| v.rolling_window)
@@ -394,53 +393,11 @@ fn build_symbol_config(
             .or(default.quantiles)
             .unwrap_or_default(),
     );
-    let csv_path = partial
-        .and_then(|v| v.csv_path.clone())
-        .or(default.csv_path)
-        .or_else(|| Some(format!("{}/{}_pnlu_factor.csv", csv_dir, symbol)));
     SymbolConfig {
         rolling_window,
         min_periods,
         quantiles,
-        csv_path: csv_path.map(PathBuf::from),
     }
-}
-
-fn warmup_from_csv(states: &mut HashMap<String, SymbolState>) -> Result<(), Box<dyn Error>> {
-    for (symbol, state) in states.iter_mut() {
-        let path = match state.config.csv_path.as_ref() {
-            Some(p) => p.clone(),
-            None => {
-                warn!("symbol {} csv_path missing, skip warmup", symbol);
-                continue;
-            }
-        };
-        if !path.exists() {
-            warn!("symbol {} csv not found {}", symbol, path.display());
-            continue;
-        }
-        let mut reader = csv::ReaderBuilder::new()
-            .has_headers(true)
-            .from_path(&path)?;
-        let mut rows = 0usize;
-        for record in reader.records() {
-            let record = record?;
-            if record.len() < 5 {
-                continue;
-            }
-            let factor = record.get(4).and_then(|v| v.parse::<f64>().ok());
-            if let Some(value) = factor {
-                push_value(state, value);
-            }
-            rows += 1;
-        }
-        update_quantiles(state);
-        info!(
-            "warmup {} rows={} window={} min_periods={}",
-            symbol, rows, state.config.rolling_window, state.config.min_periods
-        );
-    }
-    Ok(())
 }
 
 fn push_value(state: &mut SymbolState, value: f64) {
@@ -501,7 +458,6 @@ fn apply_config(
     new_cfg: SymbolConfigFile,
     states: &mut HashMap<String, SymbolState>,
     symbols: &[String],
-    csv_dir: &str,
 ) -> Result<Vec<String>, Box<dyn Error>> {
     let before: HashSet<String> = states.keys().cloned().collect();
     *current = new_cfg.clone();
@@ -509,7 +465,7 @@ fn apply_config(
     let overrides = new_cfg.symbols.as_ref();
     for symbol in symbols.iter() {
         let partial = overrides.and_then(|map| map.get(symbol));
-        let config = build_symbol_config(&new_cfg, csv_dir, symbol, partial);
+        let config = build_symbol_config(&new_cfg, partial);
         let mut state = states.remove(symbol).unwrap_or(SymbolState {
             config: config.clone(),
             values: VecDeque::new(),
@@ -519,24 +475,6 @@ fn apply_config(
         state.config = config.clone();
         while state.values.len() > state.config.rolling_window {
             state.values.pop_front();
-        }
-        if state.values.is_empty() {
-            if let Some(path) = state.config.csv_path.clone() {
-                if path.exists() {
-                    let mut reader = csv::ReaderBuilder::new()
-                        .has_headers(true)
-                        .from_path(&path)?;
-                    for record in reader.records() {
-                        let record = record?;
-                        if record.len() < 5 {
-                            continue;
-                        }
-                        if let Some(value) = record.get(4).and_then(|v| v.parse::<f64>().ok()) {
-                            push_value(&mut state, value);
-                        }
-                    }
-                }
-            }
         }
         update_quantiles(&mut state);
         next_states.insert(symbol.to_string(), state);

@@ -4,6 +4,7 @@ rolling_window = 720
 min_periods = 300
 shift = 120
 max_keep_periods = 360
+use_warmup = false
 output_ipc_prefix = "ipc:///tmp/mth_pubs/pnlu_factor.ipc"
 output_topic = "pnlu_factor"
 

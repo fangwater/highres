@@ -36,6 +36,8 @@ struct FactorStreamConf {
     shift: usize,
     #[serde(default = "default_max_keep_periods")]
     max_keep_periods: usize,
+    #[serde(default = "default_use_warmup")]
+    use_warmup: bool,
     ipc_prefix: Option<String>,
     db_root: Option<String>,
     output_ipc_prefix: Option<String>,
@@ -62,6 +64,10 @@ fn default_max_keep_periods() -> usize {
     360
 }
 
+fn default_use_warmup() -> bool {
+    false
+}
+
 impl Default for FactorStreamConf {
     fn default() -> Self {
         Self {
@@ -70,6 +76,7 @@ impl Default for FactorStreamConf {
             min_periods: default_min_periods(),
             shift: default_shift(),
             max_keep_periods: default_max_keep_periods(),
+            use_warmup: default_use_warmup(),
             ipc_prefix: None,
             db_root: None,
             output_ipc_prefix: None,
@@ -138,12 +145,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         max_keep_periods: conf.max_keep_periods,
     };
     info!(
-        "factor config period_s={} rolling_window={} min_periods={} shift={} max_keep_periods={}",
+        "factor config period_s={} rolling_window={} min_periods={} shift={} max_keep_periods={} use_warmup={}",
         factor_conf.period_s,
         factor_conf.rolling_window,
         factor_conf.min_periods,
         factor_conf.shift,
-        factor_conf.max_keep_periods
+        factor_conf.max_keep_periods,
+        conf.use_warmup
     );
 
     let output_endpoint = conf
@@ -188,13 +196,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     info!("stream mode symbols={}", symbols.len());
 
-    let warmup_seconds =
-        (factor_conf.rolling_window + factor_conf.shift) as i64 * factor_conf.period_s;
-
     let mut states = HashMap::new();
     for symbol in symbols.iter() {
         let mut state = FactorState::new(&factor_conf);
-        warmup_symbol(&db_root, symbol, warmup_seconds, &mut state)?;
+        if conf.use_warmup {
+            let warmup_seconds =
+                (factor_conf.rolling_window + factor_conf.shift) as i64 * factor_conf.period_s;
+            warmup_symbol(&db_root, symbol, warmup_seconds, &mut state)?;
+        }
         states.insert(symbol.to_string(), state);
     }
 
