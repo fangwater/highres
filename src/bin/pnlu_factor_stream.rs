@@ -1,9 +1,9 @@
 #[path = "../gconf.rs"]
 mod gconf;
-#[path = "../record.rs"]
-mod record;
 #[path = "../pnlu_factor/mod.rs"]
 mod pnlu_factor;
+#[path = "../record_types.rs"]
+mod record_types;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -12,16 +12,13 @@ use std::path::Path;
 
 use csv::ReaderBuilder;
 use log::{info, warn};
-use rocksdb::{DBCompressionType, Direction, IteratorMode, Options, DB};
 use serde::Deserialize;
 use serde_json::json;
 
-use crate::record::RecordDumpItem;
 use crate::pnlu_factor::{FactorConfig, FactorState, OrderItem};
+use crate::record_types::RecordDumpItem;
 
-const DEFAULT_IPC_PREFIX: &str =
-    "ipc:///tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures";
-const DEFAULT_DB_ROOT: &str = "data/record_persist/pairmm/okex-futures-binance-futures";
+const DEFAULT_IPC_PREFIX: &str = "ipc:///tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures";
 const DEFAULT_CONFIG_PATH: &str = "pnlu_factor.toml";
 
 #[derive(Debug, Deserialize)]
@@ -36,10 +33,7 @@ struct FactorStreamConf {
     shift: usize,
     #[serde(default = "default_max_keep_periods")]
     max_keep_periods: usize,
-    #[serde(default = "default_use_warmup")]
-    use_warmup: bool,
     ipc_prefix: Option<String>,
-    db_root: Option<String>,
     output_ipc_prefix: Option<String>,
     output_topic: Option<String>,
 }
@@ -64,10 +58,6 @@ fn default_max_keep_periods() -> usize {
     360
 }
 
-fn default_use_warmup() -> bool {
-    false
-}
-
 impl Default for FactorStreamConf {
     fn default() -> Self {
         Self {
@@ -76,9 +66,7 @@ impl Default for FactorStreamConf {
             min_periods: default_min_periods(),
             shift: default_shift(),
             max_keep_periods: default_max_keep_periods(),
-            use_warmup: default_use_warmup(),
             ipc_prefix: None,
-            db_root: None,
             output_ipc_prefix: None,
             output_topic: None,
         }
@@ -87,7 +75,6 @@ impl Default for FactorStreamConf {
 
 struct Args {
     ipc_prefix: Option<String>,
-    db_root: Option<String>,
     config_path: String,
     input_csv: Option<String>,
     csv_mode: CsvMode,
@@ -97,7 +84,6 @@ struct Args {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CsvMode {
     All,
-    Warmup,
     Live,
 }
 
@@ -105,7 +91,6 @@ impl CsvMode {
     fn parse(raw: &str) -> Option<Self> {
         match raw {
             "all" => Some(Self::All),
-            "warmup" => Some(Self::Warmup),
             "live" => Some(Self::Live),
             _ => None,
         }
@@ -145,13 +130,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         max_keep_periods: conf.max_keep_periods,
     };
     info!(
-        "factor config period_s={} rolling_window={} min_periods={} shift={} max_keep_periods={} use_warmup={}",
+        "factor config period_s={} rolling_window={} min_periods={} shift={} max_keep_periods={}",
         factor_conf.period_s,
         factor_conf.rolling_window,
         factor_conf.min_periods,
         factor_conf.shift,
-        factor_conf.max_keep_periods,
-        conf.use_warmup
+        factor_conf.max_keep_periods
     );
 
     let output_endpoint = conf
@@ -185,10 +169,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         .ipc_prefix
         .or_else(|| conf.ipc_prefix.clone())
         .unwrap_or_else(|| DEFAULT_IPC_PREFIX.to_string());
-    let db_root = args
-        .db_root
-        .or_else(|| conf.db_root.clone())
-        .unwrap_or_else(|| DEFAULT_DB_ROOT.to_string());
 
     let symbols = load_online_symbols()?;
     if symbols.is_empty() {
@@ -198,13 +178,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut states = HashMap::new();
     for symbol in symbols.iter() {
-        let mut state = FactorState::new(&factor_conf);
-        if conf.use_warmup {
-            let warmup_seconds =
-                (factor_conf.rolling_window + factor_conf.shift) as i64 * factor_conf.period_s;
-            warmup_symbol(&db_root, symbol, warmup_seconds, &mut state)?;
-        }
-        states.insert(symbol.to_string(), state);
+        states.insert(symbol.to_string(), FactorState::new(&factor_conf));
     }
 
     let prefix = normalize_ipc_prefix(&ipc_prefix);
@@ -265,7 +239,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn parse_args() -> Args {
     let mut ipc_prefix = None;
-    let mut db_root = None;
     let mut config_path = DEFAULT_CONFIG_PATH.to_string();
     let mut input_csv = None;
     let mut csv_mode = CsvMode::All;
@@ -276,9 +249,6 @@ fn parse_args() -> Args {
         match arg.as_str() {
             "--ipc-prefix" => {
                 ipc_prefix = iter.next();
-            }
-            "--db-root" => {
-                db_root = iter.next();
             }
             "--config" => {
                 if let Some(p) = iter.next() {
@@ -312,7 +282,6 @@ fn parse_args() -> Args {
 
     Args {
         ipc_prefix,
-        db_root,
         config_path,
         input_csv,
         csv_mode,
@@ -322,7 +291,7 @@ fn parse_args() -> Args {
 
 fn print_usage() {
     eprintln!(
-        "Usage:\n  pnlu_factor_stream [--ipc-prefix <IPC>] [--db-root <DIR>] [--config <PATH>]\n  pnlu_factor_stream --input-csv <PATH> [--mode <all|warmup|live>] [--tail-minutes <N>]"
+        "Usage:\n  pnlu_factor_stream [--ipc-prefix <IPC>] [--config <PATH>]\n  pnlu_factor_stream --input-csv <PATH> [--mode <all|live>] [--tail-minutes <N>]"
     );
 }
 
@@ -367,7 +336,7 @@ fn run_csv(
 ) -> Result<(), Box<dyn Error>> {
     let split_ts_ms = match mode {
         CsvMode::All => None,
-        _ => {
+        CsvMode::Live => {
             let max_ts = csv_max_ts_ms(input_csv)?;
             let split = max_ts.saturating_sub(tail_minutes.saturating_mul(60).saturating_mul(1000));
             info!(
@@ -393,16 +362,8 @@ fn run_csv(
         let ts_ms = item.ts_ms();
         let emit = match mode {
             CsvMode::All => true,
-            CsvMode::Warmup => false,
             CsvMode::Live => split_ts_ms.map(|s| ts_ms > s).unwrap_or(true),
         };
-        if mode == CsvMode::Warmup {
-            if let Some(split) = split_ts_ms {
-                if ts_ms > split {
-                    continue;
-                }
-            }
-        }
         let state = states
             .entry(symbol.clone())
             .or_insert_with(|| FactorState::new(conf));
@@ -416,9 +377,7 @@ fn run_csv(
 }
 
 fn csv_max_ts_ms(path: &str) -> Result<i64, Box<dyn Error>> {
-    let mut reader = ReaderBuilder::new()
-        .has_headers(false)
-        .from_path(path)?;
+    let mut reader = ReaderBuilder::new().has_headers(false).from_path(path)?;
     let mut max_ts: Option<i64> = None;
     for record in reader.records() {
         let record = record?;
@@ -463,127 +422,6 @@ fn order_item_from_record(record: &RecordDumpItem) -> OrderItem {
         tlen: record.tlen,
         from_key: record.from_key.clone(),
     }
-}
-
-fn open_db_read_only(path: &str) -> Result<DB, Box<dyn Error>> {
-    let mut db_opts = Options::default();
-    db_opts.set_compression_type(DBCompressionType::Lz4);
-    let cf_names = ["default", "orders", "nps"];
-    Ok(DB::open_cf_for_read_only(
-        &db_opts,
-        path,
-        cf_names,
-        false,
-    )?)
-}
-
-fn parse_ts_from_key(key: &[u8]) -> Option<i64> {
-    if key.len() < 20 {
-        return None;
-    }
-    let ts_str = std::str::from_utf8(&key[..20]).ok()?;
-    ts_str.parse::<i64>().ok()
-}
-
-fn warmup_symbol(
-    db_root: &str,
-    symbol: &str,
-    warmup_seconds: i64,
-    state: &mut FactorState,
-) -> Result<(), Box<dyn Error>> {
-    let log_summary = |rows: usize, start_ms: Option<i64>, end_ms: Option<i64>, reason: &str| {
-        let start_ms = start_ms.unwrap_or(0);
-        let end_ms = end_ms.unwrap_or(0);
-        let duration_s = if end_ms >= start_ms {
-            (end_ms - start_ms) / 1000
-        } else {
-            0
-        };
-        info!(
-            "warmup summary symbol={} rows={} duration_s={} start_ms={} end_ms={} reason={}",
-            symbol, rows, duration_s, start_ms, end_ms, reason
-        );
-    };
-
-    let db_path = format!("{}/{}", db_root.trim_end_matches('/'), symbol);
-    if !Path::new(&db_path).exists() {
-        warn!("db not found for {}, skip warmup", symbol);
-        log_summary(0, None, None, "db_not_found");
-        return Ok(());
-    }
-    let db = match open_db_read_only(&db_path) {
-        Ok(db) => db,
-        Err(err) => {
-            warn!("open db {} failed: {}", db_path, err);
-            log_summary(0, None, None, "open_db_failed");
-            return Ok(());
-        }
-    };
-    let cf = match db.cf_handle("orders") {
-        Some(v) => v,
-        None => {
-            warn!("orders column family missing for {}", symbol);
-            log_summary(0, None, None, "missing_orders_cf");
-            return Ok(());
-        }
-    };
-
-    let mut iter_end = db.iterator_cf(cf, IteratorMode::End);
-    let end_key = match iter_end.next() {
-        Some(Ok((key, _))) => key,
-        _ => {
-            log_summary(0, None, None, "no_orders");
-            return Ok(());
-        }
-    };
-    let end_ts_ms = match parse_ts_from_key(&end_key) {
-        Some(v) => v,
-        None => {
-            warn!("invalid end key for {}, skip warmup", symbol);
-            log_summary(0, None, None, "invalid_end_key");
-            return Ok(());
-        }
-    };
-    let warmup_ms = warmup_seconds.saturating_mul(1000);
-    let start_ts_ms = end_ts_ms.saturating_sub(warmup_ms);
-    let start_key = format!("{:020}_", start_ts_ms).into_bytes();
-
-    let iter = db.iterator_cf(
-        cf,
-        IteratorMode::From(&start_key, Direction::Forward),
-    );
-    let mut rows = 0usize;
-    for item in iter {
-        let (key, value) = match item {
-            Ok(v) => v,
-            Err(err) => {
-                warn!("db iterate error for {}: {}", symbol, err);
-                continue;
-            }
-        };
-        let ts = match parse_ts_from_key(&key) {
-            Some(v) => v,
-            None => continue,
-        };
-        if ts < start_ts_ms {
-            continue;
-        }
-        if ts > end_ts_ms {
-            break;
-        }
-        let record = match serde_json::from_slice::<RecordDumpItem>(&value) {
-            Ok(v) => v,
-            Err(err) => {
-                warn!("decode warmup order failed: {}", err);
-                continue;
-            }
-        };
-        let item = order_item_from_record(&record);
-        state.process_order(&item, false);
-        rows += 1;
-    }
-    log_summary(rows, Some(start_ts_ms), Some(end_ts_ms), "ok");
-    Ok(())
 }
 
 struct Publisher {

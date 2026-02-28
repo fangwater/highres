@@ -7,11 +7,12 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  stream_pairmm_batch_runner.sh [--ipc-prefix <path>] [--config <path>] [--bin <path>] [--log-dir <path>] [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>]
+  stream_pairmm_batch_runner.sh [--ipc-prefix <path>] [--config <path>] [--highres-config <path>] [--bin <path>] [--log-dir <path>] [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>]
 
 Defaults:
   --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures
-  --config     <repo>/config.toml
+  --config     <repo>/config.toml       (online_symbols 配置)
+  --highres-config <repo>/highres.toml  (策略/引擎配置)
   --bin        auto detect (<repo>/stream_pairmm or <repo>/target/release/stream_pairmm)
   --log-dir    <repo>/logs/stream_pairmm_batch
   --max-log-size-mb 200
@@ -22,6 +23,7 @@ EOF
 
 IPC_PREFIX="/tmp/mth_pubs/okex-futures-binance-futures"
 CONFIG_PATH="${BASE_DIR}/config.toml"
+HIGHRES_CONFIG_PATH="${BASE_DIR}/highres.toml"
 BIN_OVERRIDE=""
 LOG_DIR="${BASE_DIR}/logs/stream_pairmm_batch"
 MAX_LOG_SIZE_MB="200"
@@ -43,6 +45,15 @@ while [[ $# -gt 0 ]]; do
       CONFIG_PATH="${2:-}"
       if [[ -z "$CONFIG_PATH" ]]; then
         echo "[ERROR] --config requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --highres-config)
+      HIGHRES_CONFIG_PATH="${2:-}"
+      if [[ -z "$HIGHRES_CONFIG_PATH" ]]; then
+        echo "[ERROR] --highres-config requires a value" >&2
         usage >&2
         exit 1
       fi
@@ -107,6 +118,11 @@ done
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
   echo "[ERROR] config file not found: ${CONFIG_PATH}" >&2
+  exit 1
+fi
+
+if [[ ! -f "$HIGHRES_CONFIG_PATH" ]]; then
+  echo "[ERROR] highres config file not found: ${HIGHRES_CONFIG_PATH}" >&2
   exit 1
 fi
 
@@ -289,14 +305,14 @@ for symbol in $symbols_raw; do
 
   {
     echo ""
-    echo "===== $(date '+%F %T') start symbol=${symbol} ipc=${ipc_path} ====="
+    echo "===== $(date '+%F %T') start symbol=${symbol} ipc=${ipc_path} highres=${HIGHRES_CONFIG_PATH} ====="
   } >>"$out_log"
   {
     echo ""
-    echo "===== $(date '+%F %T') start symbol=${symbol} ipc=${ipc_path} ====="
+    echo "===== $(date '+%F %T') start symbol=${symbol} ipc=${ipc_path} highres=${HIGHRES_CONFIG_PATH} ====="
   } >>"$err_log"
 
-  RUST_LOG="${RUST_LOG:-info}" "$BIN_PATH" --ipc "$ipc_path" >>"$out_log" 2>>"$err_log" &
+  HIGHRES_CONFIG_PATH="$HIGHRES_CONFIG_PATH" RUST_LOG="${RUST_LOG:-info}" "$BIN_PATH" --ipc "$ipc_path" >>"$out_log" 2>>"$err_log" &
   child_pid="$!"
   CHILD_PIDS+=("$child_pid")
   CHILD_SYMBOLS["$child_pid"]="$symbol"
@@ -304,6 +320,7 @@ for symbol in $symbols_raw; do
 done
 
 echo "[INFO] stream_pairmm batch runner started (${#CHILD_PIDS[@]} children), log_dir=${LOG_DIR}"
+echo "[INFO] highres config: ${HIGHRES_CONFIG_PATH}"
 echo "[INFO] log rotate enabled: max_size_mb=${MAX_LOG_SIZE_MB} keep_files=${MAX_LOG_FILES} check_sec=${ROTATE_CHECK_SEC}"
 
 rotate_logs_loop &

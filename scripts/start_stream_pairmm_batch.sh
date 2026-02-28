@@ -7,13 +7,14 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  start_stream_pairmm_batch.sh [--ipc-prefix <path>] [--name <pm2_name>] [--config <path>] [--bin <path>] [--log-dir <path>] [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>]
+  start_stream_pairmm_batch.sh [--ipc-prefix <path>] [--name <pm2_name>] [--config <path>] [--highres-config <path>] [--bin <path>] [--log-dir <path>] [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>]
 
 Defaults:
   --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures
   --name       stream_pairmm_batch
-  --config     <repo>/config.toml
-  --log-dir    <repo>/logs/stream_pairmm_batch
+  --config     <repo>/config.toml           (online_symbols 配置)
+  --highres-config <repo>/highres.toml      (策略/引擎配置)
+  --log-dir    <repo>/logs/<pm2_name>
   --max-log-size-mb 200
   --max-log-files   10
   --rotate-check-sec 30
@@ -21,6 +22,7 @@ Defaults:
 Examples:
   ./scripts/start_stream_pairmm_batch.sh
   ./scripts/start_stream_pairmm_batch.sh --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures
+  ./scripts/start_stream_pairmm_batch.sh --highres-config ./highres_two_exchange.toml
   ./scripts/start_stream_pairmm_batch.sh --log-dir ./logs/stream_pairmm_batch
   ./scripts/start_stream_pairmm_batch.sh --max-log-size-mb 500 --max-log-files 20
   ./scripts/start_stream_pairmm_batch.sh --name stream_pairmm_batch_main
@@ -35,8 +37,10 @@ fi
 IPC_PREFIX="/tmp/mth_pubs/okex-futures-binance-futures"
 NAME="stream_pairmm_batch"
 CONFIG_PATH="${BASE_DIR}/config.toml"
+HIGHRES_CONFIG_PATH="${BASE_DIR}/highres.toml"
 BIN_OVERRIDE=""
-LOG_DIR="${BASE_DIR}/logs/stream_pairmm_batch"
+LOG_DIR=""
+LOG_DIR_SET="0"
 MAX_LOG_SIZE_MB="200"
 MAX_LOG_FILES="10"
 ROTATE_CHECK_SEC="30"
@@ -69,6 +73,15 @@ while [[ $# -gt 0 ]]; do
       fi
       shift 2
       ;;
+    --highres-config)
+      HIGHRES_CONFIG_PATH="${2:-}"
+      if [[ -z "$HIGHRES_CONFIG_PATH" ]]; then
+        echo "[ERROR] --highres-config requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
     --bin)
       BIN_OVERRIDE="${2:-}"
       if [[ -z "$BIN_OVERRIDE" ]]; then
@@ -85,6 +98,7 @@ while [[ $# -gt 0 ]]; do
         usage >&2
         exit 1
       fi
+      LOG_DIR_SET="1"
       shift 2
       ;;
     --max-log-size-mb)
@@ -126,8 +140,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "$LOG_DIR_SET" == "0" ]]; then
+  LOG_DIR="${BASE_DIR}/logs/${NAME}"
+fi
+
 if [[ ! -f "$CONFIG_PATH" ]]; then
   echo "[ERROR] config file not found: ${CONFIG_PATH}" >&2
+  exit 1
+fi
+
+if [[ ! -f "$HIGHRES_CONFIG_PATH" ]]; then
+  echo "[ERROR] highres config file not found: ${HIGHRES_CONFIG_PATH}" >&2
   exit 1
 fi
 
@@ -151,6 +174,7 @@ PM2_CMD=(
   --
   --ipc-prefix "$IPC_PREFIX"
   --config "$CONFIG_PATH"
+  --highres-config "$HIGHRES_CONFIG_PATH"
   --log-dir "$LOG_DIR"
   --max-log-size-mb "$MAX_LOG_SIZE_MB"
   --max-log-files "$MAX_LOG_FILES"

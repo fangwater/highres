@@ -1,7 +1,7 @@
 #[path = "../gconf.rs"]
 mod gconf;
-#[path = "../record.rs"]
-mod record;
+#[path = "../record_types.rs"]
+mod record_types;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -15,10 +15,9 @@ use rocksdb::{
 };
 use serde::Deserialize;
 
-use crate::record::{RecordDumpItem, TSRecordItem};
+use crate::record_types::{RecordDumpItem, TSRecordItem};
 
-const DEFAULT_IPC_PREFIX: &str =
-    "ipc:///tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures";
+const DEFAULT_IPC_PREFIX: &str = "ipc:///tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures";
 const DEFAULT_DB_ROOT: &str = "data/record_persist/pairmm/okex-futures-binance-futures";
 
 enum Mode {
@@ -402,12 +401,7 @@ fn open_db_read_only(path: &str) -> Result<DB, Box<dyn Error>> {
     let mut db_opts = Options::default();
     db_opts.set_compression_type(DBCompressionType::Lz4);
     let cf_names = ["default", "orders", "nps"];
-    Ok(DB::open_cf_for_read_only(
-        &db_opts,
-        path,
-        cf_names,
-        false,
-    )?)
+    Ok(DB::open_cf_for_read_only(&db_opts, path, cf_names, false)?)
 }
 
 fn export_csv(db_root: &str, cfg: &ExportArgs) -> Result<(), Box<dyn Error>> {
@@ -421,13 +415,9 @@ fn export_csv(db_root: &str, cfg: &ExportArgs) -> Result<(), Box<dyn Error>> {
 
     let db_path = format!("{}/{}", db_root.trim_end_matches('/'), cfg.symbol);
     let db = open_db_read_only(&db_path)?;
-    let cf = db
-        .cf_handle(kind)
-        .ok_or("column family missing")?;
+    let cf = db.cf_handle(kind).ok_or("column family missing")?;
 
-    let start_key = cfg
-        .start_ts
-        .map(|ts| format!("{:020}_", ts).into_bytes());
+    let start_key = cfg.start_ts.map(|ts| format!("{:020}_", ts).into_bytes());
     let iter = match start_key.as_ref() {
         Some(key) => db.iterator_cf(cf, IteratorMode::From(key, Direction::Forward)),
         None => db.iterator_cf(cf, IteratorMode::Start),
@@ -441,7 +431,9 @@ fn export_csv(db_root: &str, cfg: &ExportArgs) -> Result<(), Box<dyn Error>> {
         .truncate(true)
         .write(true)
         .open(&cfg.out)?;
-    let mut writer = csv::WriterBuilder::new().has_headers(false).from_writer(file);
+    let mut writer = csv::WriterBuilder::new()
+        .has_headers(false)
+        .from_writer(file);
 
     let mut written = 0usize;
     for item in iter {

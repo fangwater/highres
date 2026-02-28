@@ -56,7 +56,7 @@ Fields
 Fields
 - `ts_s` (int): timestamp in seconds.
 
-## Engine Constraints (pairmm_two_exchange_simple)
+## Engine Constraints (pairmm_two_exchange_simple / pairmm_one_exchange_simple)
 
 - `vsids` controls which sids are active. Events with sids not in `vsids` are ignored.
 - Single process should handle only one symbol to avoid shared global state collisions.

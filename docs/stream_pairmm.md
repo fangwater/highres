@@ -15,12 +15,13 @@
 
 ```toml
 [engin]
-stg = "pairmm_two_exchange_simple"   # 使用 stream_pairmm 时，必须是 pairmm_two_exchange_simple 或 pairmm
+stg = "pairmm_two_exchange_simple"   # 使用 stream_pairmm 时，建议是 pairmm_two_exchange_simple 或 pairmm_one_exchange_simple（也可 pairmm）
 sids = {0 = {exchange = "okx", etype = "swap"}, 1 = {exchange = "binance", etype = "swap"}}
 vsids = [0, 1]          # 必须包含 2 个 sid，用于 origin(0/1) 映射
 ```
 
 说明：
+- `stg = "pairmm_one_exchange_simple"`：单交易所简化版（由 `pairmm.rs.x` 迁移）。
 - `stg = "pairmm_two_exchange_simple"`：推荐用于实时流（简化版，不依赖因子）。
 - 如需完整 `pairmm`，可改为 `stg = "pairmm"`，并在 `[pairmm]` 中补齐参数。
 

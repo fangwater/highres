@@ -1,9 +1,9 @@
-#[path = "../record.rs"]
-mod record;
 #[path = "../gconf.rs"]
 mod gconf;
 #[path = "../pnlu_factor/mod.rs"]
 mod pnlu_factor;
+#[path = "../record_types.rs"]
+mod record_types;
 
 use std::error::Error;
 use std::path::Path;
@@ -15,7 +15,7 @@ use rocksdb::{DBCompressionType, Direction, IteratorMode, Options, DB};
 use serde::Deserialize;
 
 use crate::pnlu_factor::{FactorConfig, FactorState, OrderItem};
-use crate::record::RecordDumpItem;
+use crate::record_types::RecordDumpItem;
 
 const DEFAULT_DB_ROOT: &str = "data/record_persist/pairmm/okex-futures-binance-futures";
 const DEFAULT_CONFIG_PATH: &str = "pnlu_factor.toml";
@@ -43,8 +43,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let args = parse_args()?;
     let mut conf = load_factor_conf(&args.config_path)?;
-    let replay_conf = load_replay_conf(&args.config_path)
-        .unwrap_or(ReplayConf { out_dir: None, days: None, db_root: None });
+    let replay_conf = load_replay_conf(&args.config_path).unwrap_or(ReplayConf {
+        out_dir: None,
+        days: None,
+        db_root: None,
+    });
     if conf.period_s <= 0 {
         return Err("period_s must be > 0".into());
     }
@@ -165,9 +168,7 @@ fn parse_args() -> Result<Args, Box<dyn Error>> {
 }
 
 fn print_usage() {
-    eprintln!(
-        "Usage:\n  pnlu_factor_replay [--db-root <DIR>] [--config <PATH>] [--out-dir <DIR>]"
-    );
+    eprintln!("Usage:\n  pnlu_factor_replay [--db-root <DIR>] [--config <PATH>] [--out-dir <DIR>]");
 }
 
 #[derive(Debug, Deserialize)]
@@ -212,12 +213,7 @@ fn open_db_read_only(path: &str) -> Result<DB, Box<dyn Error>> {
     let mut db_opts = Options::default();
     db_opts.set_compression_type(DBCompressionType::Lz4);
     let cf_names = ["default", "orders", "nps"];
-    Ok(DB::open_cf_for_read_only(
-        &db_opts,
-        path,
-        cf_names,
-        false,
-    )?)
+    Ok(DB::open_cf_for_read_only(&db_opts, path, cf_names, false)?)
 }
 
 fn parse_ts_from_key(key: &[u8]) -> Option<i64> {
@@ -281,9 +277,7 @@ fn replay_symbol(
     };
     let days_ms = days.saturating_mul(24 * 60 * 60 * 1000);
     let mut start_ts_ms = end_ts_ms.saturating_sub(days_ms);
-    let warmup_ms = (conf.rolling_window + conf.shift) as i64
-        * conf.period_s
-        * 1000;
+    let warmup_ms = (conf.rolling_window + conf.shift) as i64 * conf.period_s * 1000;
     if start_ts_ms < earliest_ts_ms {
         info!(
             "replay {} data span < days, using earliest_ts_ms={}",
@@ -300,10 +294,7 @@ fn replay_symbol(
         symbol, earliest_ts_ms, end_ts_ms, start_ts_ms, warmup_start_ms
     );
     let start_key = format!("{:020}_", warmup_start_ms).into_bytes();
-    let iter = db.iterator_cf(
-        cf,
-        IteratorMode::From(&start_key, Direction::Forward),
-    );
+    let iter = db.iterator_cf(cf, IteratorMode::From(&start_key, Direction::Forward));
 
     let out_path = format!("{}/{}_pnlu_factor.csv", out_dir, symbol);
     let file = std::fs::OpenOptions::new()

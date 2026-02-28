@@ -7,7 +7,7 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  start_pnlu_factor_stream.sh [--name <pm2_name>] [--ipc-prefix <ipc>] [--db-root <path>] [--config <path>]
+  start_pnlu_factor_stream.sh [--name <pm2_name>] [--ipc-prefix <ipc>] [--config <path>]
 
 Examples:
   ./scripts/start_pnlu_factor_stream.sh
@@ -22,7 +22,6 @@ fi
 
 NAME_OVERRIDE=""
 IPC_PREFIX=""
-DB_ROOT=""
 CONFIG_PATH=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -39,15 +38,6 @@ while [[ $# -gt 0 ]]; do
       IPC_PREFIX="${2:-}"
       if [[ -z "$IPC_PREFIX" ]]; then
         echo "[ERROR] --ipc-prefix requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --db-root)
-      DB_ROOT="${2:-}"
-      if [[ -z "$DB_ROOT" ]]; then
-        echo "[ERROR] --db-root requires a value" >&2
         usage >&2
         exit 1
       fi
@@ -98,9 +88,6 @@ fi
 ARGS=()
 if [[ -n "$IPC_PREFIX" ]]; then
   ARGS+=(--ipc-prefix "$IPC_PREFIX")
-fi
-if [[ -n "$DB_ROOT" ]]; then
-  ARGS+=(--db-root "$DB_ROOT")
 fi
 if [[ -n "$CONFIG_PATH" ]]; then
   ARGS+=(--config "$CONFIG_PATH")
