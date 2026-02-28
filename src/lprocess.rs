@@ -268,7 +268,7 @@ pub fn process(v:&Vec<f64>, tinfo:&mut TradeInfo) {
         if warmup_s > 0
             && dinfo.first_inc_ts_s > 0
             && ts_s - dinfo.first_inc_ts_s >= warmup_s
-            && (ENGIN_CONF.stg == "pairmm_simple" || ENGIN_CONF.stg == "pairmm")
+            && (ENGIN_CONF.stg == "pairmm_two_exchange_simple" || ENGIN_CONF.stg == "pairmm")
         {
             if !dinfo.bids.is_empty() && !dinfo.asks.is_empty() {
                 dinfo.is_finish_snap = true;

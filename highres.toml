@@ -9,9 +9,9 @@ symbols = ["DOTUSDT"]
 sids = {0 = {"exchange" = "okx","etype" = "swap"}, 1 = {"exchange" = "binance","etype" = "swap"}}
 vsids = [0,1]
 #stg = "pairmm" #时序回测 ，要设置 [pairmm] sample_step = 1 里面用到了因子
-#stg = "pairmm_simple" #简化版 pairmm，只用 ts，不依赖因子
+#stg = "pairmm_two_exchange_simple" #简化版 pairmm，只用 ts，不依赖因子
 #stg = "sampling" #采样 里面只用到 ts
-stg = "pairmm_simple" #简化版 pairmm，只用 ts
+stg = "pairmm_two_exchange_simple" #简化版 pairmm，只用 ts
 
 dump_path = "data"
 start_ts=0

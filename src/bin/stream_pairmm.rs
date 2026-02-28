@@ -504,14 +504,14 @@ fn main() {
     }
     env_logger::init();
 
-    if ENGIN_CONF.stg != "pairmm_simple" {
+    if ENGIN_CONF.stg != "pairmm_two_exchange_simple" {
         warn!(
-            "stream_pairmm is intended for pairmm_simple, stg={}",
+            "stream_pairmm is intended for pairmm_two_exchange_simple, stg={}",
             ENGIN_CONF.stg
         );
     }
 
-    stgs::pairmm_simple::clear_ongoing_pending();
+    stgs::pairmm_two_exchange_simple::clear_ongoing_pending();
     clear_pending();
 
     let args = parse_args();
