@@ -94,7 +94,6 @@ for script in \
   start_stream_pairmm_batch.sh \
   stream_pairmm_batch_runner.sh \
   stop_stream_pairmm_batch.sh \
-  stop_stream_pairmm.sh \
   start_stream_pairmm_record.sh \
   stop_stream_pairmm_record.sh \
   export_stream_pairmm_record.sh; do
