@@ -6,7 +6,6 @@ BIN_NAMES=(
   "stream_pairmm"
   "stream_pairmm_record"
   "pnlu_factor_stream"
-  "pnlu_factor_rolling_metrics"
 )
 SUPPORTED_PROFILES=("okex-futures-binance-futures" "binance-futures-binance-futures")
 
@@ -108,7 +107,7 @@ Examples:
   bash scripts/deploy_stream_pairmm.sh --profile binance-futures-binance-futures --dir "/home/u171/mth_pub-binance-futures-binance-futures"
 
 This script deploys all runtime components together:
-  stream_pairmm + stream_pairmm_record + pnlu_factor_stream + pnlu_factor_rolling_metrics
+  stream_pairmm + stream_pairmm_record + pnlu_factor_stream (includes rolling runtime)
 EOF
 }
 
@@ -257,8 +256,6 @@ for script in \
   start_stream_pairmm_batch_one_exchange.sh \
   start_pnlu_factor_stream.sh \
   stop_pnlu_factor_stream.sh \
-  start_pnlu_factor_rolling_metrics.sh \
-  stop_pnlu_factor_rolling_metrics.sh \
   deploy_all_target.sh \
   stream_pairmm_batch_runner.sh \
   stop_stream_pairmm_batch.sh \
@@ -276,6 +273,7 @@ done
 
 echo "[INFO] deployed profile=${PROFILE} to ${TARGET_HOST}:${TARGET_DIR}"
 echo "[INFO] start example: ssh $TARGET_HOST \"cd $TARGET_DIR && ./scripts/start_stream_pairmm_batch.sh --name stream_pairmm_batch-$PROFILE --ipc-prefix /tmp/mth_pubs/$PROFILE --config ./config.toml --highres-config ./highres.toml\""
+echo "[INFO] record example: ssh $TARGET_HOST \"cd $TARGET_DIR && ./scripts/start_stream_pairmm_record.sh --profile $PROFILE\""
 echo "[INFO] pnlu stream example: ssh $TARGET_HOST \"cd $TARGET_DIR && ./scripts/start_pnlu_factor_stream.sh --name pnlu_factor_stream-$PROFILE --profile $PROFILE --ipc-prefix /tmp/mth_pubs/stream_pairmm/$PROFILE --config ./pnlu_factor.toml\""
-echo "[INFO] pnlu rolling example: ssh $TARGET_HOST \"cd $TARGET_DIR && ./scripts/start_pnlu_factor_rolling_metrics.sh --name pnlu_factor_rolling-$PROFILE --profile $PROFILE --config ./pnlu_factor_rolling.toml\""
+echo "[INFO] note: rolling is embedded in pnlu_factor_stream, config file is ./pnlu_factor_rolling.toml"
 echo "[INFO] deploy finished. profile=${PROFILE}"

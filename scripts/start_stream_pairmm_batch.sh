@@ -7,9 +7,10 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  start_stream_pairmm_batch.sh [--ipc-prefix <path>] [--name <pm2_name>] [--config <path>] [--highres-config <path>] [--bin <path>] [--log-dir <path>] [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>]
+  start_stream_pairmm_batch.sh [--profile <name>] [--ipc-prefix <path>] [--name <pm2_name>] [--config <path>] [--highres-config <path>] [--bin <path>] [--log-dir <path>] [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>]
 
 Defaults:
+  --profile    (optional) when set, default ipc-prefix/name follow profile
   --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures
   --name       stream_pairmm_batch
   --config     <repo>/config.toml           (online_symbols 配置)
@@ -21,6 +22,7 @@ Defaults:
 
 Examples:
   ./scripts/start_stream_pairmm_batch.sh
+  ./scripts/start_stream_pairmm_batch.sh --profile okex-futures-binance-futures
   ./scripts/start_stream_pairmm_batch.sh --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures
   ./scripts/start_stream_pairmm_batch.sh --highres-config ./highres_two_exchange.toml
   ./scripts/start_stream_pairmm_batch.sh --log-dir ./logs/stream_pairmm_batch
@@ -36,6 +38,9 @@ fi
 
 IPC_PREFIX="/tmp/mth_pubs/okex-futures-binance-futures"
 NAME="stream_pairmm_batch"
+PROFILE=""
+IPC_PREFIX_SET="0"
+NAME_SET="0"
 CONFIG_PATH="${BASE_DIR}/config.toml"
 HIGHRES_CONFIG_PATH="${BASE_DIR}/highres.toml"
 BIN_OVERRIDE=""
@@ -46,6 +51,15 @@ MAX_LOG_FILES="10"
 ROTATE_CHECK_SEC="30"
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --profile)
+      PROFILE="${2:-}"
+      if [[ -z "$PROFILE" ]]; then
+        echo "[ERROR] --profile requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
     --ipc-prefix)
       IPC_PREFIX="${2:-}"
       if [[ -z "$IPC_PREFIX" ]]; then
@@ -53,6 +67,7 @@ while [[ $# -gt 0 ]]; do
         usage >&2
         exit 1
       fi
+      IPC_PREFIX_SET="1"
       shift 2
       ;;
     --name)
@@ -62,6 +77,7 @@ while [[ $# -gt 0 ]]; do
         usage >&2
         exit 1
       fi
+      NAME_SET="1"
       shift 2
       ;;
     --config)
@@ -140,6 +156,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "$PROFILE" ]] && [[ "$IPC_PREFIX_SET" == "0" ]]; then
+  IPC_PREFIX="/tmp/mth_pubs/${PROFILE}"
+fi
+if [[ -n "$PROFILE" ]] && [[ "$NAME_SET" == "0" ]]; then
+  NAME="stream_pairmm_batch-${PROFILE}"
+fi
+
 if [[ "$LOG_DIR_SET" == "0" ]]; then
   LOG_DIR="${BASE_DIR}/logs/${NAME}"
 fi
@@ -187,8 +210,37 @@ fi
 
 RUST_LOG="${RUST_LOG:-info}" "${PM2_CMD[@]}"
 
+START_RECORD_SCRIPT="${SCRIPT_DIR}/start_stream_pairmm_record.sh"
+if [[ ! -f "$START_RECORD_SCRIPT" ]]; then
+  echo "[ERROR] script not found: ${START_RECORD_SCRIPT}" >&2
+  exit 1
+fi
+
+IPC_PATH="${IPC_PREFIX#ipc://}"
+IPC_PATH="${IPC_PATH%/}"
+if [[ "$IPC_PATH" == /tmp/mth_pubs/* ]]; then
+  IPC_SUFFIX="${IPC_PATH#/tmp/mth_pubs/}"
+else
+  IPC_SUFFIX="$(basename "$IPC_PATH")"
+fi
+if [[ -z "$IPC_SUFFIX" ]]; then
+  echo "[ERROR] failed to derive record ipc suffix from --ipc-prefix: ${IPC_PREFIX}" >&2
+  exit 1
+fi
+
+RECORD_NAME="${NAME}-record"
+RECORD_IPC_PREFIX="/tmp/mth_pubs/stream_pairmm/${IPC_SUFFIX}"
+RECORD_DB_ROOT="/mnt/data/data/record_persist/pairmm/${IPC_SUFFIX}"
+
+"$START_RECORD_SCRIPT" \
+  --name "$RECORD_NAME" \
+  --ipc-prefix "$RECORD_IPC_PREFIX" \
+  --db-root "$RECORD_DB_ROOT"
+
 echo ""
 echo "[INFO] Started: ${NAME}"
 echo "Namespace: ${NAMESPACE}"
 echo "Logs: pm2 logs --namespace ${NAMESPACE} ${NAME}"
 echo "Status: pm2 status --namespace ${NAMESPACE}"
+echo "Record: ${NAME}-record"
+echo "Record logs: pm2 logs --namespace ${NAMESPACE} ${NAME}-record"

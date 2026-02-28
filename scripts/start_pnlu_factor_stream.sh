@@ -7,11 +7,12 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  start_pnlu_factor_stream.sh [--name <pm2_name>] [--ipc-prefix <ipc>] [--output-ipc-prefix <ipc>] [--profile <name>] [--config <path>]
+  start_pnlu_factor_stream.sh [--name <pm2_name>] [--ipc-prefix <ipc>] [--output-ipc-prefix <ipc>] [--profile <name>] [--config <path>] [--rolling-config <path>]
 
 Examples:
   ./scripts/start_pnlu_factor_stream.sh
   ./scripts/start_pnlu_factor_stream.sh --profile okex-futures-binance-futures
+  ./scripts/start_pnlu_factor_stream.sh --profile okex-futures-binance-futures --rolling-config ./pnlu_factor_rolling.toml
   ./scripts/start_pnlu_factor_stream.sh --ipc-prefix /tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures
 EOF
 }
@@ -26,6 +27,7 @@ IPC_PREFIX=""
 OUTPUT_IPC_PREFIX=""
 PROFILE=""
 CONFIG_PATH=""
+ROLLING_CONFIG_PATH=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --name)
@@ -68,6 +70,15 @@ while [[ $# -gt 0 ]]; do
       CONFIG_PATH="${2:-}"
       if [[ -z "$CONFIG_PATH" ]]; then
         echo "[ERROR] --config requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --rolling-config)
+      ROLLING_CONFIG_PATH="${2:-}"
+      if [[ -z "$ROLLING_CONFIG_PATH" ]]; then
+        echo "[ERROR] --rolling-config requires a value" >&2
         usage >&2
         exit 1
       fi
@@ -122,6 +133,9 @@ if [[ -n "$PROFILE" ]]; then
 fi
 if [[ -n "$CONFIG_PATH" ]]; then
   ARGS+=(--config "$CONFIG_PATH")
+fi
+if [[ -n "$ROLLING_CONFIG_PATH" ]]; then
+  ARGS+=(--rolling-config "$ROLLING_CONFIG_PATH")
 fi
 
 echo "[INFO] Restarting ${NAME}"

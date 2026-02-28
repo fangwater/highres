@@ -7,10 +7,11 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  stop_stream_pairmm_record.sh [--name <pm2_name>]
+  stop_stream_pairmm_record.sh [--name <pm2_name>] [--profile <name>]
 
 Examples:
   ./scripts/stop_stream_pairmm_record.sh
+  ./scripts/stop_stream_pairmm_record.sh --profile okex-futures-binance-futures
   ./scripts/stop_stream_pairmm_record.sh --name stream_pairmm_record
 EOF
 }
@@ -21,12 +22,22 @@ if ! command -v pm2 >/dev/null 2>&1; then
 fi
 
 NAME_OVERRIDE=""
+PROFILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --name)
       NAME_OVERRIDE="${2:-}"
       if [[ -z "$NAME_OVERRIDE" ]]; then
         echo "[ERROR] --name requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --profile)
+      PROFILE="${2:-}"
+      if [[ -z "$PROFILE" ]]; then
+        echo "[ERROR] --profile requires a value" >&2
         usage >&2
         exit 1
       fi
@@ -44,7 +55,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-NAME="${NAME_OVERRIDE:-stream_pairmm_record}"
+if [[ -n "$NAME_OVERRIDE" ]]; then
+  NAME="$NAME_OVERRIDE"
+elif [[ -n "$PROFILE" ]]; then
+  NAME="stream_pairmm_record-${PROFILE}"
+else
+  NAME="stream_pairmm_record"
+fi
 NAMESPACE="$(basename "${BASE_DIR}")"
 
 pm2 delete "$NAME" --namespace "$NAMESPACE" || true

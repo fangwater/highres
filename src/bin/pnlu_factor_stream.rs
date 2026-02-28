@@ -1,5 +1,7 @@
 #[path = "../pnlu_factor/mod.rs"]
 mod pnlu_factor;
+#[path = "../pnlu_factor_rolling_runtime.rs"]
+mod pnlu_factor_rolling_runtime;
 #[path = "../record_types.rs"]
 mod record_types;
 
@@ -14,10 +16,12 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::pnlu_factor::{FactorConfig, FactorState, OrderItem};
+use crate::pnlu_factor_rolling_runtime::RollingRuntime;
 use crate::record_types::RecordDumpItem;
 
 const DEFAULT_IPC_PREFIX: &str = "ipc:///tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures";
 const DEFAULT_CONFIG_PATH: &str = "pnlu_factor.toml";
+const DEFAULT_ROLLING_CONFIG_PATH: &str = "pnlu_factor_rolling.toml";
 
 #[derive(Debug, Deserialize)]
 struct FactorStreamConf {
@@ -76,6 +80,7 @@ struct Args {
     output_ipc_prefix: Option<String>,
     profile: Option<String>,
     config_path: String,
+    rolling_config_path: String,
     input_csv: Option<String>,
     csv_mode: CsvMode,
     tail_minutes: i64,
@@ -153,6 +158,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .unwrap_or_else(|| "pnlu_factor".to_string());
     let mut publisher = Publisher::new(&output_endpoint, &output_topic)?;
 
+    let symbols = load_online_symbols()?;
+    if symbols.is_empty() {
+        return Err("online_symbols is empty in config.toml".into());
+    }
+    info!("symbols={}", symbols.len());
+    let mut rolling_runtime = RollingRuntime::new(
+        &args.rolling_config_path,
+        args.profile.as_deref(),
+        &symbols,
+    )?;
+
     if let Some(input_csv) = args.input_csv.as_ref() {
         info!(
             "csv mode input={} mode={:?} tail_minutes={}",
@@ -164,6 +180,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             args.tail_minutes,
             &factor_conf,
             &mut publisher,
+            &mut rolling_runtime,
         );
     }
 
@@ -171,12 +188,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .ipc_prefix
         .or_else(|| conf.ipc_prefix.clone())
         .unwrap_or_else(|| DEFAULT_IPC_PREFIX.to_string());
-
-    let symbols = load_online_symbols()?;
-    if symbols.is_empty() {
-        return Err("online_symbols is empty in config.toml".into());
-    }
-    info!("stream mode symbols={}", symbols.len());
+    info!("stream mode symbols={} ipc_prefix={}", symbols.len(), ipc_prefix);
 
     let mut states = HashMap::new();
     for symbol in symbols.iter() {
@@ -235,6 +247,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 symbol, row.ts, row.target_ts, row.pnlu_sum, row.factor, open_cnt, close_cnt
             );
             publisher.send(&symbol, &row)?;
+            rolling_runtime.on_factor_row(&symbol, row.ts, row.target_ts, row.factor);
         }
     }
 }
@@ -244,6 +257,7 @@ fn parse_args() -> Args {
     let mut output_ipc_prefix = None;
     let mut profile = None;
     let mut config_path = DEFAULT_CONFIG_PATH.to_string();
+    let mut rolling_config_path = DEFAULT_ROLLING_CONFIG_PATH.to_string();
     let mut input_csv = None;
     let mut csv_mode = CsvMode::All;
     let mut tail_minutes = 10i64;
@@ -263,6 +277,11 @@ fn parse_args() -> Args {
             "--config" => {
                 if let Some(p) = iter.next() {
                     config_path = p;
+                }
+            }
+            "--rolling-config" => {
+                if let Some(p) = iter.next() {
+                    rolling_config_path = p;
                 }
             }
             "--input-csv" => {
@@ -295,6 +314,7 @@ fn parse_args() -> Args {
         output_ipc_prefix,
         profile,
         config_path,
+        rolling_config_path,
         input_csv,
         csv_mode,
         tail_minutes,
@@ -303,7 +323,7 @@ fn parse_args() -> Args {
 
 fn print_usage() {
     eprintln!(
-        "Usage:\n  pnlu_factor_stream [--ipc-prefix <IPC>] [--output-ipc-prefix <IPC>] [--profile <name>] [--config <PATH>]\n  pnlu_factor_stream --input-csv <PATH> [--mode <all|live>] [--tail-minutes <N>]"
+        "Usage:\n  pnlu_factor_stream [--ipc-prefix <IPC>] [--output-ipc-prefix <IPC>] [--profile <name>] [--config <PATH>] [--rolling-config <PATH>]\n  pnlu_factor_stream --input-csv <PATH> [--mode <all|live>] [--tail-minutes <N>]"
     );
 }
 
@@ -361,6 +381,7 @@ fn run_csv(
     tail_minutes: i64,
     conf: &FactorConfig,
     publisher: &mut Publisher,
+    rolling_runtime: &mut RollingRuntime,
 ) -> Result<(), Box<dyn Error>> {
     let split_ts_ms = match mode {
         CsvMode::All => None,
@@ -398,6 +419,7 @@ fn run_csv(
         let rows = state.process_order(&item, emit);
         for row in rows {
             publisher.send(&symbol, &row)?;
+            rolling_runtime.on_factor_row(&symbol, row.ts, row.target_ts, row.factor);
         }
     }
 

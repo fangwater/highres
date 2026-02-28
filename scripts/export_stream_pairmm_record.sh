@@ -7,11 +7,12 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  export_stream_pairmm_record.sh --symbol <SYMBOL> [--out-dir <DIR>] [--db-root <DIR>]
-  export_stream_pairmm_record.sh --all [--out-dir <DIR>] [--db-root <DIR>]
+  export_stream_pairmm_record.sh --symbol <SYMBOL> [--out-dir <DIR>] [--db-root <DIR>] [--profile <name>]
+  export_stream_pairmm_record.sh --all [--out-dir <DIR>] [--db-root <DIR>] [--profile <name>]
 
 Examples:
   ./scripts/export_stream_pairmm_record.sh --symbol SOLUSDT
+  ./scripts/export_stream_pairmm_record.sh --profile okex-futures-binance-futures --symbol SOLUSDT
   ./scripts/export_stream_pairmm_record.sh --symbol SOLUSDT --out-dir ./exports
   ./scripts/export_stream_pairmm_record.sh --all
 EOF
@@ -21,6 +22,7 @@ SYMBOL=""
 ALL=false
 OUT_DIR=""
 DB_ROOT=""
+PROFILE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --symbol)
@@ -49,6 +51,15 @@ while [[ $# -gt 0 ]]; do
       DB_ROOT="${2:-}"
       if [[ -z "$DB_ROOT" ]]; then
         echo "[ERROR] --db-root requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --profile)
+      PROFILE="${2:-}"
+      if [[ -z "$PROFILE" ]]; then
+        echo "[ERROR] --profile requires a value" >&2
         usage >&2
         exit 1
       fi
@@ -104,7 +115,11 @@ mkdir -p "$OUT_DIR"
 
 ARGS=()
 if [[ -z "$DB_ROOT" ]]; then
-  DB_ROOT="/mnt/data/data/record_persist/pairmm/okex-futures-binance-futures"
+  if [[ -n "$PROFILE" ]]; then
+    DB_ROOT="/mnt/data/data/record_persist/pairmm/${PROFILE}"
+  else
+    DB_ROOT="/mnt/data/data/record_persist/pairmm/okex-futures-binance-futures"
+  fi
 fi
 ARGS+=(--db-root "$DB_ROOT")
 
