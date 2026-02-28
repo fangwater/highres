@@ -11,11 +11,56 @@ Usage:
   export_stream_pairmm_record.sh --all [--out-dir <DIR>] [--db-root <DIR>] [--profile <name>]
 
 Examples:
+  ./scripts/export_stream_pairmm_record.sh --all
   ./scripts/export_stream_pairmm_record.sh --symbol SOLUSDT
   ./scripts/export_stream_pairmm_record.sh --profile okex-futures-binance-futures --symbol SOLUSDT
+  ./scripts/export_stream_pairmm_record.sh --db-root /mnt/data/data/record_persist/pairmm/okex-futures-binance-futures --all
   ./scripts/export_stream_pairmm_record.sh --symbol SOLUSDT --out-dir ./exports
-  ./scripts/export_stream_pairmm_record.sh --all
 EOF
+}
+
+SUPPORTED_PROFILES=("okex-futures-binance-futures" "binance-futures-binance-futures")
+
+infer_profile_from_base_dir() {
+  local base_name=""
+  local profile=""
+  base_name="$(basename "$BASE_DIR")"
+
+  for profile in "${SUPPORTED_PROFILES[@]}"; do
+    if [[ "$base_name" == "$profile" ]] || [[ "$base_name" == *"-${profile}" ]]; then
+      echo "$profile"
+      return 0
+    fi
+  done
+
+  for profile in "${SUPPORTED_PROFILES[@]}"; do
+    if [[ -f "${BASE_DIR}/config.${profile}.toml" ]] || \
+       [[ -f "${BASE_DIR}/highres.${profile}.toml" ]] || \
+       [[ -f "${BASE_DIR}/pnlu_factor.${profile}.toml" ]]; then
+      echo "$profile"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+derive_export_scope() {
+  local profile="$1"
+  local db_root="$2"
+  local token=""
+
+  if [[ -n "$profile" ]]; then
+    token="$profile"
+  else
+    token="$(basename "${db_root%/}")"
+  fi
+
+  token="${token//\//-}"
+  if [[ -z "$token" ]]; then
+    token="default"
+  fi
+  echo "$token"
 }
 
 SYMBOL=""
@@ -89,10 +134,6 @@ if [[ "$ALL" != "true" && -z "$SYMBOL" ]]; then
   exit 1
 fi
 
-if [[ -z "$OUT_DIR" ]]; then
-  OUT_DIR="/mnt/data/order_data"
-fi
-
 BIN_CANDIDATES=(
   "${BASE_DIR}/stream_pairmm_record"
   "${BASE_DIR}/target/release/stream_pairmm_record"
@@ -111,17 +152,32 @@ if [[ -z "$BIN_PATH" ]]; then
   exit 1
 fi
 
-mkdir -p "$OUT_DIR"
-
 ARGS=()
 if [[ -z "$DB_ROOT" ]]; then
+  if [[ -z "$PROFILE" ]]; then
+    PROFILE="$(infer_profile_from_base_dir || true)"
+    if [[ -n "$PROFILE" ]]; then
+      echo "[INFO] inferred profile from working directory: ${PROFILE}"
+    fi
+  fi
+
   if [[ -n "$PROFILE" ]]; then
     DB_ROOT="/mnt/data/data/record_persist/pairmm/${PROFILE}"
   else
-    DB_ROOT="/mnt/data/data/record_persist/pairmm/okex-futures-binance-futures"
+    echo "[ERROR] failed to infer profile from current working directory: ${BASE_DIR}" >&2
+    echo "[HINT] provide --profile or --db-root explicitly" >&2
+    exit 1
   fi
 fi
 ARGS+=(--db-root "$DB_ROOT")
+
+if [[ -z "$OUT_DIR" ]]; then
+  EXPORT_SCOPE="$(derive_export_scope "$PROFILE" "$DB_ROOT")"
+  OUT_DIR="/mnt/data/order_data/${EXPORT_SCOPE}"
+  echo "[INFO] auto out dir by scope=${EXPORT_SCOPE}: ${OUT_DIR}"
+fi
+
+mkdir -p "$OUT_DIR"
 
 if [[ "$ALL" == "true" ]]; then
   echo "[INFO] Export all symbols"
