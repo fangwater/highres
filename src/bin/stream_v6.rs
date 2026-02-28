@@ -1,4 +1,4 @@
-#[path = "../gconf.rs"]
+#[path = "../gconf_stream.rs"]
 mod gconf;
 #[path = "../lprocess.rs"]
 mod lprocess;
@@ -27,8 +27,8 @@ use serde::Deserialize;
 use std::io::{self, BufRead};
 
 use crate::gconf::ENGIN_CONF;
-use crate::record::{write_to_csv, RecordDumpItem};
 use crate::ordertake::add_taking;
+use crate::record::{write_to_csv, RecordDumpItem};
 use crate::spending::{
     add_pending, clear_pending, drop_pending, S_PENDING_PRICEKEY_ASKS, S_PENDING_PRICEKEY_BIDS,
 };
@@ -129,7 +129,8 @@ fn record_pendings(tsms: i64, tinfo: &mut TradeInfo) {
                         contract_value = market.contract_value.unwrap();
                     }
 
-                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0 {
+                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0
+                    {
                         let dinfo: &mut DepthInfo = tinfo.depths.get_mut(sid).unwrap();
                         let update_ts_ms = tsms;
                         let rd: RecordDumpItem = RecordDumpItem {
@@ -179,7 +180,8 @@ fn record_pendings(tsms: i64, tinfo: &mut TradeInfo) {
                         contract_value = market.contract_value.unwrap();
                     }
 
-                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0 {
+                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0
+                    {
                         let dinfo: &mut DepthInfo = tinfo.depths.get_mut(sid).unwrap();
                         let update_ts_ms = tsms;
                         let rd: RecordDumpItem = RecordDumpItem {
@@ -267,7 +269,15 @@ fn handle_trade(tinfo: &mut TradeInfo, row: &StreamEvent) {
         } => (*ts_us, *sid, *side_id, *price, *amount),
         _ => return,
     };
-    let v = vec![ts_us as f64, 0.0, side_id as f64, price, amount, 0.0, sid as f64];
+    let v = vec![
+        ts_us as f64,
+        0.0,
+        side_id as f64,
+        price,
+        amount,
+        0.0,
+        sid as f64,
+    ];
     tprocess::process(&v, tinfo);
 }
 
@@ -281,7 +291,14 @@ fn handle_tick(tinfo: &mut TradeInfo, row: &StreamEvent) {
             buy_cancel,
             sell_cancel,
             ..
-        } => (*ts_s, *signal1, *signal2, *signal3, *buy_cancel, *sell_cancel),
+        } => (
+            *ts_s,
+            *signal1,
+            *signal2,
+            *signal3,
+            *buy_cancel,
+            *sell_cancel,
+        ),
         _ => return,
     };
     let v = vec![
@@ -299,10 +316,13 @@ fn main() {
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
 
     if ENGIN_CONF.stg != "sampling_v6" {
-        warn!("stream_v6 is intended for sampling_v6, stg={}", ENGIN_CONF.stg);
+        warn!(
+            "stream_v6 is intended for sampling_v6, stg={}",
+            ENGIN_CONF.stg
+        );
     }
 
-    stgs::sampling_v6::clear_ongoing_pending();
+    // stgs::sampling_v6::clear_ongoing_pending();
     clear_pending();
 
     let stdin = io::stdin();

@@ -6,8 +6,3 @@ shift = 120
 max_keep_periods = 360
 output_ipc_prefix = "ipc:///tmp/mth_pubs/pnlu_factor.ipc"
 output_topic = "pnlu_factor"
-
-[pnlu_factor_replay]
-out_dir = "/mnt/data/pnlu_factor_replay"
-days = 7
-db_root = "data/record_persist/pairmm/okex-futures-binance-futures"

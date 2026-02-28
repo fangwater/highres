@@ -1,4 +1,4 @@
-#[path = "../gconf.rs"]
+#[path = "../gconf_stream.rs"]
 mod gconf;
 #[path = "../lprocess.rs"]
 mod lprocess;
@@ -71,7 +71,8 @@ fn record_pendings(tsms: i64, tinfo: &mut TradeInfo) {
                         contract_value = market.contract_value.unwrap();
                     }
 
-                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0 {
+                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0
+                    {
                         let dinfo: &mut DepthInfo = tinfo.depths.get_mut(sid).unwrap();
                         let update_ts_ms = tsms;
                         let rd: RecordDumpItem = RecordDumpItem {
@@ -121,7 +122,8 @@ fn record_pendings(tsms: i64, tinfo: &mut TradeInfo) {
                         contract_value = market.contract_value.unwrap();
                     }
 
-                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0 {
+                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0
+                    {
                         let dinfo: &mut DepthInfo = tinfo.depths.get_mut(sid).unwrap();
                         let update_ts_ms = tsms;
                         let rd: RecordDumpItem = RecordDumpItem {
@@ -198,7 +200,14 @@ fn tick_row(
     ]
 }
 
-fn inc_row(ts_us: i64, sid: i32, is_snapshot: i32, side_id: i32, price: f64, amount: f64) -> Vec<f64> {
+fn inc_row(
+    ts_us: i64,
+    sid: i32,
+    is_snapshot: i32,
+    side_id: i32,
+    price: f64,
+    amount: f64,
+) -> Vec<f64> {
     vec![
         ts_us as f64,
         is_snapshot as f64,
@@ -211,7 +220,15 @@ fn inc_row(ts_us: i64, sid: i32, is_snapshot: i32, side_id: i32, price: f64, amo
 }
 
 fn trade_row(ts_us: i64, sid: i32, side_id: i32, price: f64, amount: f64) -> Vec<f64> {
-    vec![ts_us as f64, 0.0, side_id as f64, price, amount, 0.0, sid as f64]
+    vec![
+        ts_us as f64,
+        0.0,
+        side_id as f64,
+        price,
+        amount,
+        0.0,
+        sid as f64,
+    ]
 }
 
 fn add_snapshot(rows: &mut Vec<Vec<f64>>, base_ts_us: i64, sid: i32, bid1: f64, ask1: f64) {
@@ -275,7 +292,10 @@ fn main() {
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
 
     if ENGIN_CONF.stg != "sampling_v6" {
-        warn!("mock_v6 is intended for sampling_v6, stg={}", ENGIN_CONF.stg);
+        warn!(
+            "mock_v6 is intended for sampling_v6, stg={}",
+            ENGIN_CONF.stg
+        );
     }
 
     if ENGIN_CONF.symbols.is_empty() {
@@ -284,14 +304,17 @@ fn main() {
     }
 
     if ENGIN_CONF.vsids.len() < 2 {
-        warn!("mock_v6 expects at least 2 sids, vsids={:?}", ENGIN_CONF.vsids);
+        warn!(
+            "mock_v6 expects at least 2 sids, vsids={:?}",
+            ENGIN_CONF.vsids
+        );
     }
 
     let sid_a = *ENGIN_CONF.vsids.get(0).unwrap_or(&0);
     let sid_b = *ENGIN_CONF.vsids.get(1).unwrap_or(&sid_a);
 
     for symbol in &ENGIN_CONF.symbols {
-        stgs::sampling_v6::clear_ongoing_pending();
+        // stgs::sampling_v6::clear_ongoing_pending();
         run_mock(symbol, sid_a, sid_b);
         clear_pending();
     }

@@ -61,9 +61,5 @@ name = "pnlu_factor_stream"
 path = "src/bin/pnlu_factor_stream.rs"
 
 [[bin]]
-name = "pnlu_factor_replay"
-path = "src/bin/pnlu_factor_replay.rs"
-
-[[bin]]
 name = "pnlu_factor_rolling_metrics"
 path = "src/bin/pnlu_factor_rolling_metrics.rs"

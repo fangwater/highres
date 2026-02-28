@@ -38,6 +38,13 @@ struct ProcessConfigFile {
     redis_key: Option<String>,
 }
 
+struct Args {
+    config_path: String,
+    ipc_prefix: Option<String>,
+    redis_key: Option<String>,
+    profile: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 struct SymbolConfig {
     rolling_window: usize,
@@ -138,7 +145,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     env_logger::init();
 
-    let process_cfg = load_process_config(DEFAULT_PROCESS_CONFIG)?;
+    let args = parse_args();
+    let process_cfg = load_process_config(&args.config_path)?;
     let symbols_config_path = process_cfg
         .symbols_config
         .clone()
@@ -147,11 +155,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     let log_factor_thresholds = process_cfg.log_factor_thresholds.unwrap_or(false);
     let log_redis_write_success = process_cfg.log_redis_write_success.unwrap_or(false);
     let redis_url = process_cfg.redis_url.clone().unwrap_or_default();
-    let redis_key = process_cfg
+    let redis_key = args
         .redis_key
         .clone()
+        .or_else(|| args.profile.as_ref().map(|p| redis_key_from_profile(p)))
+        .or_else(|| process_cfg.redis_key.clone())
         .unwrap_or_else(|| "_pnlu_factor_thresholds".to_string());
-    let ipc_prefix = process_cfg.ipc_prefix.clone().unwrap_or_default();
+    let ipc_prefix = args
+        .ipc_prefix
+        .clone()
+        .or_else(|| args.profile.as_ref().map(|p| output_ipc_from_profile(p)))
+        .or_else(|| process_cfg.ipc_prefix.clone())
+        .unwrap_or_default();
 
     let mut cfg = load_symbol_config(&symbols_config_path)?;
     let all_symbols = load_online_symbols()?;
@@ -164,7 +179,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         info!("symbols config expanded {}", symbols_config_path);
     }
     info!(
-        "rolling-metrics config symbols={} ipc_endpoint={} reload_sec={} symbols_config={} log_redis_write_success={}",
+        "rolling-metrics config process_cfg={} symbols={} ipc_endpoint={} reload_sec={} symbols_config={} log_redis_write_success={}",
+        args.config_path,
         all_symbols.len(),
         ipc_prefix,
         reload_sec,
@@ -299,6 +315,72 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
+    }
+}
+
+fn parse_args() -> Args {
+    let mut config_path = DEFAULT_PROCESS_CONFIG.to_string();
+    let mut ipc_prefix = None;
+    let mut redis_key = None;
+    let mut profile = None;
+
+    let mut iter = std::env::args().skip(1);
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--config" => {
+                if let Some(v) = iter.next() {
+                    config_path = v;
+                }
+            }
+            "--ipc-prefix" => {
+                ipc_prefix = iter.next();
+            }
+            "--redis-key" => {
+                redis_key = iter.next();
+            }
+            "--profile" => {
+                profile = iter.next();
+            }
+            "-h" | "--help" => {
+                print_usage();
+                std::process::exit(0);
+            }
+            _ => {}
+        }
+    }
+
+    Args {
+        config_path,
+        ipc_prefix,
+        redis_key,
+        profile,
+    }
+}
+
+fn print_usage() {
+    eprintln!(
+        "Usage:\n  pnlu_factor_rolling_metrics [--config <PATH>] [--ipc-prefix <IPC>] [--redis-key <KEY_SUFFIX>] [--profile <name>]"
+    );
+}
+
+fn output_ipc_from_profile(profile: &str) -> String {
+    let token = sanitize_profile_token(profile);
+    format!("ipc:///tmp/mth_pubs/pnlu_factor/{}.ipc", token)
+}
+
+fn redis_key_from_profile(profile: &str) -> String {
+    let token = sanitize_profile_token(profile);
+    format!("_pnlu_factor_thresholds_{}", token)
+}
+
+fn sanitize_profile_token(raw: &str) -> String {
+    let t = raw.trim();
+    let t = t.trim_matches('/');
+    let replaced = t.replace('/', "-");
+    if replaced.is_empty() {
+        "default".to_string()
+    } else {
+        replaced
     }
 }
 

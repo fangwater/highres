@@ -1,4 +1,4 @@
-#[path = "../gconf.rs"]
+#[path = "../gconf_stream.rs"]
 mod gconf;
 #[path = "../lprocess.rs"]
 mod lprocess;
@@ -28,8 +28,8 @@ use std::io::{self, BufRead};
 use std::path::Path;
 
 use crate::gconf::ENGIN_CONF;
-use crate::record::{init_record_pub_from_market_ipc, write_to_csv, RecordDumpItem};
 use crate::ordertake::add_taking;
+use crate::record::{init_record_pub_from_market_ipc, write_to_csv, RecordDumpItem};
 use crate::spending::{
     add_pending, clear_pending, drop_pending, S_PENDING_PRICEKEY_ASKS, S_PENDING_PRICEKEY_BIDS,
 };
@@ -41,10 +41,7 @@ use zmq::Message as ZmqMessage;
 #[serde(tag = "event")]
 enum StreamEvent {
     #[serde(rename = "tick")]
-    Tick {
-        symbol: String,
-        ts_s: i64,
-    },
+    Tick { symbol: String, ts_s: i64 },
     #[serde(rename = "inc")]
     Inc {
         symbol: String,
@@ -195,7 +192,8 @@ fn record_pendings(tsms: i64, tinfo: &mut TradeInfo) {
                         contract_value = market.contract_value.unwrap();
                     }
 
-                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0 {
+                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0
+                    {
                         let dinfo: &mut DepthInfo = tinfo.depths.get_mut(sid).unwrap();
                         let update_ts_ms = tsms;
                         let rd: RecordDumpItem = RecordDumpItem {
@@ -245,7 +243,8 @@ fn record_pendings(tsms: i64, tinfo: &mut TradeInfo) {
                         contract_value = market.contract_value.unwrap();
                     }
 
-                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0 {
+                    if ENGIN_CONF.is_spending_tick_dump && (tsms % ENGIN_CONF.tick_dump_modts) == 0
+                    {
                         let dinfo: &mut DepthInfo = tinfo.depths.get_mut(sid).unwrap();
                         let update_ts_ms = tsms;
                         let rd: RecordDumpItem = RecordDumpItem {
@@ -333,7 +332,15 @@ fn handle_trade(tinfo: &mut TradeInfo, row: &StreamEvent) {
         } => (*ts_us, *sid, *side_id, *price, *amount),
         _ => return,
     };
-    let v = vec![ts_us as f64, 0.0, side_id as f64, price, amount, 0.0, sid as f64];
+    let v = vec![
+        ts_us as f64,
+        0.0,
+        side_id as f64,
+        price,
+        amount,
+        0.0,
+        sid as f64,
+    ];
     tprocess::process(&v, tinfo);
 }
 

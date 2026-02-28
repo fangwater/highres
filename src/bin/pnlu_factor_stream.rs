@@ -1,5 +1,3 @@
-#[path = "../gconf.rs"]
-mod gconf;
 #[path = "../pnlu_factor/mod.rs"]
 mod pnlu_factor;
 #[path = "../record_types.rs"]
@@ -75,6 +73,8 @@ impl Default for FactorStreamConf {
 
 struct Args {
     ipc_prefix: Option<String>,
+    output_ipc_prefix: Option<String>,
+    profile: Option<String>,
     config_path: String,
     input_csv: Option<String>,
     csv_mode: CsvMode,
@@ -138,10 +138,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         factor_conf.max_keep_periods
     );
 
-    let output_endpoint = conf
+    let output_endpoint = args
         .output_ipc_prefix
         .clone()
-        .unwrap_or_else(|| "ipc:///tmp/mth_pubs/pnlu_factor.ipc".to_string());
+        .or_else(|| args.profile.as_ref().map(|p| output_ipc_from_profile(p)))
+        .or_else(|| conf.output_ipc_prefix.clone())
+        .unwrap_or_default();
     if output_endpoint.trim().is_empty() {
         return Err("output_ipc_prefix is required".into());
     }
@@ -239,6 +241,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 fn parse_args() -> Args {
     let mut ipc_prefix = None;
+    let mut output_ipc_prefix = None;
+    let mut profile = None;
     let mut config_path = DEFAULT_CONFIG_PATH.to_string();
     let mut input_csv = None;
     let mut csv_mode = CsvMode::All;
@@ -249,6 +253,12 @@ fn parse_args() -> Args {
         match arg.as_str() {
             "--ipc-prefix" => {
                 ipc_prefix = iter.next();
+            }
+            "--output-ipc-prefix" => {
+                output_ipc_prefix = iter.next();
+            }
+            "--profile" => {
+                profile = iter.next();
             }
             "--config" => {
                 if let Some(p) = iter.next() {
@@ -282,6 +292,8 @@ fn parse_args() -> Args {
 
     Args {
         ipc_prefix,
+        output_ipc_prefix,
+        profile,
         config_path,
         input_csv,
         csv_mode,
@@ -291,8 +303,24 @@ fn parse_args() -> Args {
 
 fn print_usage() {
     eprintln!(
-        "Usage:\n  pnlu_factor_stream [--ipc-prefix <IPC>] [--config <PATH>]\n  pnlu_factor_stream --input-csv <PATH> [--mode <all|live>] [--tail-minutes <N>]"
+        "Usage:\n  pnlu_factor_stream [--ipc-prefix <IPC>] [--output-ipc-prefix <IPC>] [--profile <name>] [--config <PATH>]\n  pnlu_factor_stream --input-csv <PATH> [--mode <all|live>] [--tail-minutes <N>]"
     );
+}
+
+fn output_ipc_from_profile(profile: &str) -> String {
+    let token = sanitize_profile_token(profile);
+    format!("ipc:///tmp/mth_pubs/pnlu_factor/{}.ipc", token)
+}
+
+fn sanitize_profile_token(raw: &str) -> String {
+    let t = raw.trim();
+    let t = t.trim_matches('/');
+    let replaced = t.replace('/', "-");
+    if replaced.is_empty() {
+        "default".to_string()
+    } else {
+        replaced
+    }
 }
 
 fn load_factor_conf(path: &str) -> Result<FactorStreamConf, Box<dyn Error>> {

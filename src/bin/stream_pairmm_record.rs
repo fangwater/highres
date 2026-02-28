@@ -1,5 +1,3 @@
-#[path = "../gconf.rs"]
-mod gconf;
 #[path = "../record_types.rs"]
 mod record_types;
 

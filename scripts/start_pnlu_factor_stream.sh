@@ -7,10 +7,11 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  start_pnlu_factor_stream.sh [--name <pm2_name>] [--ipc-prefix <ipc>] [--config <path>]
+  start_pnlu_factor_stream.sh [--name <pm2_name>] [--ipc-prefix <ipc>] [--output-ipc-prefix <ipc>] [--profile <name>] [--config <path>]
 
 Examples:
   ./scripts/start_pnlu_factor_stream.sh
+  ./scripts/start_pnlu_factor_stream.sh --profile okex-futures-binance-futures
   ./scripts/start_pnlu_factor_stream.sh --ipc-prefix /tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures
 EOF
 }
@@ -22,6 +23,8 @@ fi
 
 NAME_OVERRIDE=""
 IPC_PREFIX=""
+OUTPUT_IPC_PREFIX=""
+PROFILE=""
 CONFIG_PATH=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -38,6 +41,24 @@ while [[ $# -gt 0 ]]; do
       IPC_PREFIX="${2:-}"
       if [[ -z "$IPC_PREFIX" ]]; then
         echo "[ERROR] --ipc-prefix requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --output-ipc-prefix)
+      OUTPUT_IPC_PREFIX="${2:-}"
+      if [[ -z "$OUTPUT_IPC_PREFIX" ]]; then
+        echo "[ERROR] --output-ipc-prefix requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --profile)
+      PROFILE="${2:-}"
+      if [[ -z "$PROFILE" ]]; then
+        echo "[ERROR] --profile requires a value" >&2
         usage >&2
         exit 1
       fi
@@ -64,6 +85,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "$PROFILE" ]] && [[ -z "$OUTPUT_IPC_PREFIX" ]]; then
+  OUTPUT_IPC_PREFIX="ipc:///tmp/mth_pubs/pnlu_factor/${PROFILE}.ipc"
+fi
+
 NAME="${NAME_OVERRIDE:-pnlu_factor_stream}"
 NAMESPACE="$(basename "${BASE_DIR}")"
 
@@ -88,6 +113,12 @@ fi
 ARGS=()
 if [[ -n "$IPC_PREFIX" ]]; then
   ARGS+=(--ipc-prefix "$IPC_PREFIX")
+fi
+if [[ -n "$OUTPUT_IPC_PREFIX" ]]; then
+  ARGS+=(--output-ipc-prefix "$OUTPUT_IPC_PREFIX")
+fi
+if [[ -n "$PROFILE" ]]; then
+  ARGS+=(--profile "$PROFILE")
 fi
 if [[ -n "$CONFIG_PATH" ]]; then
   ARGS+=(--config "$CONFIG_PATH")
