@@ -7,14 +7,23 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  start_stream_pairmm_batch.sh [--ipc-prefix <path>]
+  start_stream_pairmm_batch.sh [--ipc-prefix <path>] [--name <pm2_name>] [--config <path>] [--bin <path>] [--log-dir <path>] [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>]
 
 Defaults:
   --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures
+  --name       stream_pairmm_batch
+  --config     <repo>/config.toml
+  --log-dir    <repo>/logs/stream_pairmm_batch
+  --max-log-size-mb 200
+  --max-log-files   10
+  --rotate-check-sec 30
 
 Examples:
   ./scripts/start_stream_pairmm_batch.sh
   ./scripts/start_stream_pairmm_batch.sh --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures
+  ./scripts/start_stream_pairmm_batch.sh --log-dir ./logs/stream_pairmm_batch
+  ./scripts/start_stream_pairmm_batch.sh --max-log-size-mb 500 --max-log-files 20
+  ./scripts/start_stream_pairmm_batch.sh --name stream_pairmm_batch_main
 EOF
 }
 
@@ -24,12 +33,82 @@ if ! command -v pm2 >/dev/null 2>&1; then
 fi
 
 IPC_PREFIX="/tmp/mth_pubs/okex-futures-binance-futures"
+NAME="stream_pairmm_batch"
+CONFIG_PATH="${BASE_DIR}/config.toml"
+BIN_OVERRIDE=""
+LOG_DIR="${BASE_DIR}/logs/stream_pairmm_batch"
+MAX_LOG_SIZE_MB="200"
+MAX_LOG_FILES="10"
+ROTATE_CHECK_SEC="30"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --ipc-prefix)
       IPC_PREFIX="${2:-}"
       if [[ -z "$IPC_PREFIX" ]]; then
         echo "[ERROR] --ipc-prefix requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --name)
+      NAME="${2:-}"
+      if [[ -z "$NAME" ]]; then
+        echo "[ERROR] --name requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --config)
+      CONFIG_PATH="${2:-}"
+      if [[ -z "$CONFIG_PATH" ]]; then
+        echo "[ERROR] --config requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --bin)
+      BIN_OVERRIDE="${2:-}"
+      if [[ -z "$BIN_OVERRIDE" ]]; then
+        echo "[ERROR] --bin requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --log-dir)
+      LOG_DIR="${2:-}"
+      if [[ -z "$LOG_DIR" ]]; then
+        echo "[ERROR] --log-dir requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --max-log-size-mb)
+      MAX_LOG_SIZE_MB="${2:-}"
+      if [[ -z "$MAX_LOG_SIZE_MB" ]]; then
+        echo "[ERROR] --max-log-size-mb requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --max-log-files)
+      MAX_LOG_FILES="${2:-}"
+      if [[ -z "$MAX_LOG_FILES" ]]; then
+        echo "[ERROR] --max-log-files requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --rotate-check-sec)
+      ROTATE_CHECK_SEC="${2:-}"
+      if [[ -z "$ROTATE_CHECK_SEC" ]]; then
+        echo "[ERROR] --rotate-check-sec requires a value" >&2
         usage >&2
         exit 1
       fi
@@ -47,72 +126,45 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-CONFIG_PATH="${BASE_DIR}/config.toml"
 if [[ ! -f "$CONFIG_PATH" ]]; then
-  echo "[ERROR] config.toml not found in ${BASE_DIR}" >&2
+  echo "[ERROR] config file not found: ${CONFIG_PATH}" >&2
   exit 1
 fi
 
-symbols_raw="$(python3 - "$CONFIG_PATH" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8", errors="ignore")
-symbols = []
-
-def find_key(obj, key):
-    if isinstance(obj, dict):
-        if key in obj:
-            return obj[key]
-        for v in obj.values():
-            res = find_key(v, key)
-            if res is not None:
-                return res
-    if isinstance(obj, list):
-        for v in obj:
-            res = find_key(v, key)
-            if res is not None:
-                return res
-    return None
-
-toml = None
-try:
-    import tomllib as toml  # py3.11+
-except Exception:
-    try:
-        import tomli as toml  # type: ignore
-    except Exception:
-        toml = None
-
-if toml is not None:
-    try:
-        data = toml.loads(text)
-        value = find_key(data, "online_symbols")
-        if isinstance(value, list):
-            symbols = [str(x) for x in value if str(x).strip()]
-    except Exception:
-        symbols = []
-
-if not symbols:
-    text = re.sub(r"#.*", "", text)
-    m = re.search(r"online_symbols\\s*=\\s*\\[(.*?)\\]", text, re.S)
-    if m:
-        items = [s.strip() for s in m.group(1).split(",") if s.strip()]
-        symbols = [s.strip('"').strip("'") for s in items if s.strip()]
-
-print(" ".join(symbols))
-PY
-)"
-
-if [[ -z "$symbols_raw" ]]; then
-  echo "[ERROR] online_symbols is empty in config.toml" >&2
+RUNNER_PATH="${SCRIPT_DIR}/stream_pairmm_batch_runner.sh"
+if [[ ! -f "$RUNNER_PATH" ]]; then
+  echo "[ERROR] runner script not found: ${RUNNER_PATH}" >&2
   exit 1
 fi
 
-for symbol in $symbols_raw; do
-  ipc_path="${IPC_PREFIX}/${symbol}.ipc"
-  echo "[INFO] start ${symbol} ipc=${ipc_path}"
-  "${SCRIPT_DIR}/start_stream_pairmm.sh" --ipc "$ipc_path"
-done
+NAMESPACE="$(basename "${BASE_DIR}")"
+
+echo "[INFO] Restarting ${NAME}"
+pm2 delete "$NAME" --namespace "$NAMESPACE" >/dev/null 2>&1 || true
+
+PM2_CMD=(
+  pm2 start "$RUNNER_PATH"
+  --interpreter bash
+  --name "$NAME"
+  --namespace "$NAMESPACE"
+  --cwd "$BASE_DIR"
+  --
+  --ipc-prefix "$IPC_PREFIX"
+  --config "$CONFIG_PATH"
+  --log-dir "$LOG_DIR"
+  --max-log-size-mb "$MAX_LOG_SIZE_MB"
+  --max-log-files "$MAX_LOG_FILES"
+  --rotate-check-sec "$ROTATE_CHECK_SEC"
+)
+
+if [[ -n "$BIN_OVERRIDE" ]]; then
+  PM2_CMD+=(--bin "$BIN_OVERRIDE")
+fi
+
+RUST_LOG="${RUST_LOG:-info}" "${PM2_CMD[@]}"
+
+echo ""
+echo "[INFO] Started: ${NAME}"
+echo "Namespace: ${NAMESPACE}"
+echo "Logs: pm2 logs --namespace ${NAMESPACE} ${NAME}"
+echo "Status: pm2 status --namespace ${NAMESPACE}"

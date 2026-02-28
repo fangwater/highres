@@ -92,6 +92,8 @@ ssh "$TARGET_HOST" "mkdir -p \"$TARGET_DIR/logs\""
 for script in \
   start_stream_pairmm.sh \
   start_stream_pairmm_batch.sh \
+  stream_pairmm_batch_runner.sh \
+  stop_stream_pairmm_batch.sh \
   stop_stream_pairmm.sh \
   start_stream_pairmm_record.sh \
   stop_stream_pairmm_record.sh \
