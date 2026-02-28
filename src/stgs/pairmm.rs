@@ -1,7 +1,6 @@
 use super::super::trade::{CancelDecision, DepthInfo, MakeDecision, TradeInfo};
 use crate::gconf::{ENGIN_CONF, PAIRMM_CONF};
 use crate::spending::{
-    get_pending_num_dup_key_ask, get_pending_num_dup_key_bid, get_pending_num_from_key,
     get_pending_num_from_key_ask, get_pending_num_from_key_bid,
 };
 use crate::spending::{PendingItem, S_PENDING_PRICEKEY_ASKS, S_PENDING_PRICEKEY_BIDS};
@@ -239,7 +238,7 @@ pub fn cb_finished(ts: i64, tinfo: &mut TradeInfo, pitem: &PendingItem, is_cance
 
         if pitem.side == "bid" {
             //ask close
-            let amount_deal = ((pitem.amount_init - pitem.amount) * contract_value_m);
+            let amount_deal = (pitem.amount_init - pitem.amount) * contract_value_m;
             if amount_deal != 0. {
                 let mut cvitem = Vec::new();
                 let citem = CITEM {
@@ -276,7 +275,7 @@ pub fn cb_finished(ts: i64, tinfo: &mut TradeInfo, pitem: &PendingItem, is_cance
                 }
             }
         } else if pitem.side == "ask" {
-            let amount_deal = ((pitem.amount_init - pitem.amount) * contract_value_m);
+            let amount_deal = (pitem.amount_init - pitem.amount) * contract_value_m;
             if amount_deal != 0. {
                 let mut cvitem = Vec::new();
                 let citem = CITEM {
@@ -653,7 +652,7 @@ pub fn get_close_decision(t: &Vec<f64>, tinfo: &mut TradeInfo) -> Vec<MakeDecisi
 
                 let curr_last = (t[0] as i32 - (ci.start_close_ts) as i32) as f64;
 
-                if (curr_last < PAIRMM_CONF.close_ts) {
+                if curr_last < PAIRMM_CONF.close_ts {
                     continue;
                 }
 
@@ -756,7 +755,7 @@ pub fn get_close_decision(t: &Vec<f64>, tinfo: &mut TradeInfo) -> Vec<MakeDecisi
                 // let ts = t[*COLS.get(&("ts".to_string())).unwrap()] as i64;
 
                 let curr_last = (t[0] as i32 - (ci.start_close_ts) as i32) as f64;
-                if (curr_last < PAIRMM_CONF.close_ts) {
+                if curr_last < PAIRMM_CONF.close_ts {
                     continue;
                 }
 

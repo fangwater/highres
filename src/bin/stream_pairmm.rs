@@ -169,7 +169,7 @@ fn origin_to_sid(origin: u8) -> Option<i32> {
 
 fn record_pendings(tsms: i64, tinfo: &mut TradeInfo) {
     for sid in &ENGIN_CONF.vsids {
-        if let Some(mut porders) =
+        if let Some(porders) =
             S_PENDING_PRICEKEY_BIDS[&sid].try_write_for(std::time::Duration::from_secs(1))
         {
             let mut _vdel: Vec<OrderedFloat<f64>> = Vec::new();
@@ -220,7 +220,7 @@ fn record_pendings(tsms: i64, tinfo: &mut TradeInfo) {
             }
         }
 
-        if let Some(mut porders) =
+        if let Some(porders) =
             S_PENDING_PRICEKEY_ASKS[&sid].try_write_for(std::time::Duration::from_secs(1))
         {
             let mut _vdel: Vec<OrderedFloat<f64>> = Vec::new();

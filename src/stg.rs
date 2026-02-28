@@ -3,7 +3,7 @@ use crate::stgs::{pairmm, pairmm_one_exchange_simple, pairmm_two_exchange_simple
 // use crate::stgs::{sampling, sampling_v5, sampling_v6};
 use crate::trade::TradeInfo;
 use crate::trade::{CancelDecision, MakeDecision};
-use log::{debug, info};
+use log::debug;
 
 use crate::spending::PendingItem;
 

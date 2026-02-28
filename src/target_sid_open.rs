@@ -1,6 +1,5 @@
 use crate::gconf::ENGIN_CONF;
 use lazy_static::lazy_static;
-use log::info;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::time::Duration;

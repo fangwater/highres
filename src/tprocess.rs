@@ -124,7 +124,7 @@ pub fn process(t: &Vec<f64>, tinfo: &mut TradeInfo) {
                     for pitem in vpitem.iter_mut() {
                         //info!("bid coid={} amount={} price={}", &pitem.client_order_id, amount_trade, price_trade);
                         let pos = pitem.inpos - pitem.trade_comsume_amount;
-                        let mut taker_amount = amount_trade - pos;
+                        let taker_amount = amount_trade - pos;
                         //taker_amount = taker_amount.min(pitem.amount);
                         if taker_amount <= 0. {
                             pitem.trade_comsume_amount += amount_trade;
@@ -208,7 +208,7 @@ pub fn process(t: &Vec<f64>, tinfo: &mut TradeInfo) {
                         );
 
                         let pos = pitem.inpos - pitem.trade_comsume_amount;
-                        let mut taker_amount = amount_trade - pos;
+                        let taker_amount = amount_trade - pos;
                         //taker_amount = taker_amount.min(pitem.amount);
 
                         if taker_amount <= 0. {

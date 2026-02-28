@@ -6,6 +6,10 @@
 
 部署目录下需要包含：
 - `highres.toml`
+- `config.toml`
+- `pnlu_factor.toml`
+- `pnlu_factor_rolling.toml`
+- `pnlu_factor_rolling_symbols.json`
 
 `stream_pairmm` 会在当前工作目录读取 `highres.toml`。
 
@@ -38,29 +42,49 @@ max_open_order_keep_s = 120
 max_close_order_keep_s = 30
 ```
 
-## 4. 启动方式（仅 Batch）
+## 4. 统一部署入口
 
-`stream_pairmm` 只消费 IPC 二进制流，不需要 JSON。生产运行统一使用 batch 方式，由 PM2 管理一个总进程。
+生产环境统一使用以下入口脚本：
 
-启动（推荐）：
 ```bash
-./scripts/start_stream_pairmm_batch.sh \
-  --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures \
-  --log-dir ./logs/stream_pairmm_batch \
-  --max-log-size-mb 200 \
-  --max-log-files 10 \
-  --rotate-check-sec 30
+# 部署单套（双所）
+bash scripts/deploy_stream_pairmm.sh --profile okex-futures-binance-futures
+
+# 部署单套（单所）
+bash scripts/deploy_stream_pairmm.sh --profile binance-futures-binance-futures
+
+# 一次部署两套
+bash scripts/deploy_all_target.sh
 ```
 
-停止（batch）：
+## 5. 启动方式（仅 Batch）
+
+`stream_pairmm` 只消费 IPC 二进制流，不需要 JSON。运行统一使用 batch，由 PM2 管理一个总进程。
+
+启动：
 ```bash
-./scripts/stop_stream_pairmm_batch.sh
+# 双所
+bash scripts/start_stream_pairmm_batch_two_exchange.sh
+
+# 单所
+bash scripts/start_stream_pairmm_batch_one_exchange.sh
 ```
 
-## 5. 日志
+停止：
+```bash
+# 双所
+bash scripts/stop_stream_pairmm_batch_two_exchange.sh
+
+# 单所
+bash scripts/stop_stream_pairmm_batch_one_exchange.sh
+```
+
+## 6. 日志
 
 - PM2 只管理 batch 总进程（可用 `pm2 logs` 看调度日志）。
-- 子进程日志按 symbol 分文件，默认目录为仓库根目录下：
-  - `logs/stream_pairmm_batch/<SYMBOL>.out.log`
-  - `logs/stream_pairmm_batch/<SYMBOL>.err.log`
+- 子进程日志按 symbol 分文件，默认目录按进程名隔离：
+  - `logs/stream_pairmm_batch_two_exchange/<SYMBOL>.out.log`
+  - `logs/stream_pairmm_batch_two_exchange/<SYMBOL>.err.log`
+  - `logs/stream_pairmm_batch_one_exchange/<SYMBOL>.out.log`
+  - `logs/stream_pairmm_batch_one_exchange/<SYMBOL>.err.log`
 - 日志会按大小自动轮转，参数由 `--max-log-size-mb / --max-log-files / --rotate-check-sec` 控制。

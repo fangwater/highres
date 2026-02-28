@@ -1,6 +1,6 @@
 use crate::spending::{S_PENDING_PRICEKEY_ASKS, S_PENDING_PRICEKEY_BIDS};
 use crate::trade::{DepthInfo, TradeInfo};
-use log::{debug, info};
+use log::debug;
 use ordered_float::OrderedFloat;
 use std::time::Duration;
 
@@ -32,7 +32,7 @@ pub fn pending_adjust(
                         if v.trade_comsume_amount > 0. {
                             if v.inpos - v.trade_comsume_amount < 0. {
                                 v.inpos = 0.;
-                                delta_amount += (v.inpos - v.trade_comsume_amount);
+                                delta_amount += v.inpos - v.trade_comsume_amount;
                             } else {
                                 v.inpos -= v.trade_comsume_amount;
                                 delta_amount += v.trade_comsume_amount;
@@ -85,7 +85,7 @@ pub fn pending_adjust(
                         if v.trade_comsume_amount > 0. {
                             if v.inpos - v.trade_comsume_amount < 0. {
                                 v.inpos = 0.;
-                                delta_amount += (v.inpos - v.trade_comsume_amount);
+                                delta_amount += v.inpos - v.trade_comsume_amount;
                             } else {
                                 v.inpos -= v.trade_comsume_amount;
                                 delta_amount += v.trade_comsume_amount;

@@ -1,7 +1,6 @@
 use super::super::trade::{CancelDecision, DepthInfo, MakeDecision, TradeInfo};
 use crate::gconf::{ENGIN_CONF, PAIRMM_CONF};
 use crate::spending::{
-    get_pending_num_dup_key_ask, get_pending_num_dup_key_bid, get_pending_num_from_key,
     get_pending_num_from_key_ask, get_pending_num_from_key_bid,
 };
 use crate::spending::{PendingItem, S_PENDING_PRICEKEY_ASKS, S_PENDING_PRICEKEY_BIDS};
@@ -16,9 +15,6 @@ use std::time::Duration;
 use crate::symbolinfo::get_market;
 
 use csv::ReaderBuilder;
-use rust_decimal::prelude::*;
-use rust_decimal::Decimal;
-use std::str::FromStr;
 
 #[derive(Debug)]
 pub struct CITEM {
@@ -236,7 +232,7 @@ pub fn cb_finished(ts: i64, tinfo: &mut TradeInfo, pitem: &PendingItem, is_cance
 
         if pitem.side == "bid" {
             //ask close
-            let amount_deal = ((pitem.amount_init - pitem.amount) * contract_value_m);
+            let amount_deal = (pitem.amount_init - pitem.amount) * contract_value_m;
             if amount_deal != 0. {
                 let mut cvitem = Vec::new();
                 let citem = CITEM {
@@ -276,7 +272,7 @@ pub fn cb_finished(ts: i64, tinfo: &mut TradeInfo, pitem: &PendingItem, is_cance
                 }
             }
         } else if pitem.side == "ask" {
-            let amount_deal = ((pitem.amount_init - pitem.amount) * contract_value_m);
+            let amount_deal = (pitem.amount_init - pitem.amount) * contract_value_m;
             if amount_deal != 0. {
                 let mut cvitem = Vec::new();
                 let citem = CITEM {
@@ -569,7 +565,7 @@ pub fn get_close_decision(t: &Vec<f64>, tinfo: &mut TradeInfo) -> Vec<MakeDecisi
 
                 // println!("start_close_ts=={}=={}",t[0],ci.start_close_ts);
 
-                if (curr_last < PAIRMM_CONF.close_ts) {
+                if curr_last < PAIRMM_CONF.close_ts {
                     continue;
                 }
 
@@ -658,7 +654,7 @@ pub fn get_close_decision(t: &Vec<f64>, tinfo: &mut TradeInfo) -> Vec<MakeDecisi
 
                 let curr_last = (t[0] as i32 - (ci.start_close_ts) as i32) as f64;
 
-                if (curr_last < PAIRMM_CONF.close_ts) {
+                if curr_last < PAIRMM_CONF.close_ts {
                     continue;
                 }
 
@@ -998,11 +994,11 @@ pub fn write_pending_info(t: &Vec<f64>, tinfo: &mut TradeInfo) {
             for (_price, vpitem) in porders.phash.iter() {
                 for pitem in vpitem.iter() {
                     // println!("bid============={}==={:?}",ts_t,pitem);
-                    let mut filled_am = pitem.amount_init - pitem.amount;
+                    let filled_am = pitem.amount_init - pitem.amount;
                     let mut st = "".to_string();
                     if filled_am == 0.0 {
                         st = "pending".to_string();
-                    } else if (filled_am > 0.0 && filled_am < pitem.amount_init) {
+                    } else if filled_am > 0.0 && filled_am < pitem.amount_init {
                         st = "partial_filled".to_string();
                     } else {
                         st = "filled".to_string();
@@ -1015,11 +1011,11 @@ pub fn write_pending_info(t: &Vec<f64>, tinfo: &mut TradeInfo) {
             for (_price, vpitem) in porders.phash.iter() {
                 for pitem in vpitem.iter() {
                     // println!("ask============={}==={:?}",ts_t,pitem);
-                    let mut filled_am = pitem.amount_init - pitem.amount;
+                    let filled_am = pitem.amount_init - pitem.amount;
                     let mut st = "".to_string();
                     if filled_am == 0.0 {
                         st = "pending".to_string();
-                    } else if (filled_am > 0.0 && filled_am < pitem.amount_init) {
+                    } else if filled_am > 0.0 && filled_am < pitem.amount_init {
                         st = "partial_filled".to_string();
                     } else {
                         st = "filled".to_string();

@@ -30,6 +30,18 @@ This crate depends on a local path crate `../mm_common`. Make sure it exists.
 `run.sh` clears `logs/`, kills a named process, and runs `cargo run` under
 `nohup`.
 
+### Production deployment (unified entry)
+
+Use unified deployment scripts only:
+
+- Single target:
+  - `bash scripts/deploy_stream_pairmm.sh --profile okex-futures-binance-futures`
+  - `bash scripts/deploy_stream_pairmm.sh --profile binance-futures-binance-futures`
+- All targets:
+  - `bash scripts/deploy_all_target.sh`
+
+Split deployment entrypoints were removed; use the unified deploy scripts above.
+
 ## 3) Configuration file: `highres.toml`
 
 The `src/gconf.rs` module loads multiple config sections into strongly typed

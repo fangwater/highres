@@ -58,16 +58,16 @@ lazy_static! {
 
     //list of all ongoing orders
     static ref ONGOING_BID: RwLock<HashMap<String,VCITEM>> = {
-        let mut r = RwLock::new(HashMap::new());
+        let r = RwLock::new(HashMap::new());
         r
     };
     static ref ONGOING_ASK: RwLock<HashMap<String, VCITEM>> = {
-        let mut r = RwLock::new(HashMap::new());
+        let r = RwLock::new(HashMap::new());
         r
     };
 
     static ref SAMPLEOPEN: RwLock<HashMap<String, Vec<SAMPLEITEM>>> = {
-        let mut r = RwLock::new(HashMap::new());
+        let r = RwLock::new(HashMap::new());
         r
     };
 }
@@ -105,7 +105,7 @@ pub fn init_sample(symbol: &str) {
             };
 
             if sample_open.contains_key(&k) {
-                let mut vfs = sample_open.get_mut(&k).unwrap();
+                let vfs = sample_open.get_mut(&k).unwrap();
                 vfs.push(samlpe_item);
             } else {
                 //let nh::HashMap<String, Vec<f64>>> = HashMap::new();
@@ -143,7 +143,7 @@ pub fn cb_filled(tinfo: &mut TradeInfo, pitem: &PendingItem, filled_amount: f64)
         if pitem.side == "bid" {
             if let Some(mut ongoing) = ONGOING_BID.try_write_for(Duration::from_secs(1)) {
                 if ongoing.contains_key(&open_from_key.to_string()) {
-                    let mut cvs = ongoing.get_mut(&open_from_key.to_string()).unwrap();
+                    let cvs = ongoing.get_mut(&open_from_key.to_string()).unwrap();
                     let mut deal_amount = 0.;
                     for ci in cvs.citems.iter_mut() {
                         if ci.sidc != pitem.sid {
@@ -169,7 +169,7 @@ pub fn cb_filled(tinfo: &mut TradeInfo, pitem: &PendingItem, filled_amount: f64)
         } else if pitem.side == "ask" {
             if let Some(mut ongoing) = ONGOING_ASK.try_write_for(Duration::from_secs(1)) {
                 if ongoing.contains_key(&open_from_key.to_string()) {
-                    let mut cvs = ongoing.get_mut(&open_from_key.to_string()).unwrap();
+                    let cvs = ongoing.get_mut(&open_from_key.to_string()).unwrap();
                     let mut deal_amount = 0.;
                     for ci in cvs.citems.iter_mut() {
                         if ci.sidc != pitem.sid {
@@ -455,7 +455,7 @@ pub fn is_cancel(t: &Vec<f64>, tinfo: &mut TradeInfo, pitem: &PendingItem, sid: 
                     return true;
                 }
 
-                let mut cvs = ongoing.get_mut(&open_from_key.to_string()).unwrap();
+                let cvs = ongoing.get_mut(&open_from_key.to_string()).unwrap();
                 let mut total_deal = 0.;
                 for ci in cvs.citems.iter_mut() {
                     total_deal += ci.curr_amount;
@@ -478,7 +478,7 @@ pub fn is_cancel(t: &Vec<f64>, tinfo: &mut TradeInfo, pitem: &PendingItem, sid: 
                     return true;
                 }
 
-                let mut cvs = ongoing.get_mut(&open_from_key.to_string()).unwrap();
+                let cvs = ongoing.get_mut(&open_from_key.to_string()).unwrap();
                 let mut total_deal = 0.;
                 for ci in cvs.citems.iter_mut() {
                     total_deal += ci.curr_amount;
@@ -554,7 +554,7 @@ pub fn get_target_prem_by_ranges(side: &str, ranges: Vec<f64>, sf: f64, is_open:
 pub fn get_range_of_pstat(ts: i64, side: &str, sid: i32) -> Vec<f64> {
     //pstat
     //let k = record.get(1).unwrap().to_string() + ":" + &record.get(2).unwrap().to_string() + ":" + &record.get(3).unwrap().to_string();
-    let mut vs: Vec<f64> = vec![0.0, 0.0002, 0.0006, 0.001];
+    let vs: Vec<f64> = vec![0.0, 0.0002, 0.0006, 0.001];
     return vs;
 }
 
@@ -652,7 +652,7 @@ pub fn get_close_decision(t: &Vec<f64>, tinfo: &mut TradeInfo) -> Vec<MakeDecisi
 
                 let curr_last = (t[0] as i32 - (ci.start_close_ts) as i32) as f64;
 
-                if (curr_last < PAIRMM_CONF.close_ts) {
+                if curr_last < PAIRMM_CONF.close_ts {
                     continue;
                 }
 
@@ -672,7 +672,7 @@ pub fn get_close_decision(t: &Vec<f64>, tinfo: &mut TradeInfo) -> Vec<MakeDecisi
                 //                 info!("fkey={} rb_close={} range_delta={} rb={}", ci.from_key, rb_close, range_delta, rb);
 
                 let rb = PAIRMM_CONF.close_rb;
-                let mut pkey = "cl_".to_string() + &citem.sidc.to_string() + "_" + &ci.from_key;
+                let pkey = "cl_".to_string() + &citem.sidc.to_string() + "_" + &ci.from_key;
                 let curr_cid = COID_INC.fetch_add(1, Ordering::Relaxed);
                 let client_order_id = "cbid_m_".to_string()
                     + &ci.sidm.to_string()
@@ -755,7 +755,7 @@ pub fn get_close_decision(t: &Vec<f64>, tinfo: &mut TradeInfo) -> Vec<MakeDecisi
                 // let ts = t[*COLS.get(&("ts".to_string())).unwrap()] as i64;
 
                 let curr_last = (t[0] as i32 - (ci.start_close_ts) as i32) as f64;
-                if (curr_last < PAIRMM_CONF.close_ts) {
+                if curr_last < PAIRMM_CONF.close_ts {
                     continue;
                 }
 
@@ -777,7 +777,7 @@ pub fn get_close_decision(t: &Vec<f64>, tinfo: &mut TradeInfo) -> Vec<MakeDecisi
                 //                 info!("fkey={} rb_close={} range_delta={} rb={}", ci.from_key, rb_close, range_delta, rb);
 
                 let rb = PAIRMM_CONF.close_rb;
-                let mut pkey = "cl_".to_string() + &citem.sidc.to_string() + "_" + &ci.from_key;
+                let pkey = "cl_".to_string() + &citem.sidc.to_string() + "_" + &ci.from_key;
                 let curr_cid = COID_INC.fetch_add(1, Ordering::Relaxed);
                 let client_order_id = "cask_m_".to_string()
                     + &ci.sidm.to_string()
@@ -959,7 +959,7 @@ pub fn get_open_decision(t: &Vec<f64>, tinfo: &mut TradeInfo) -> Vec<MakeDecisio
             );
             let upos_t: f64 = pos_t * contract_value_t * mid_t;
 
-            let mut is_open = true;
+            let is_open = true;
 
             let ranges_bid_prem = &PAIRMM_CONF.open_ranges;
             // get_target_prem_by_ranges("buy", ranges_bids, f, is_open);
@@ -1050,7 +1050,7 @@ pub fn get_open_decision(t: &Vec<f64>, tinfo: &mut TradeInfo) -> Vec<MakeDecisio
             );
             let upos_t: f64 = pos_t * contract_value_t * mid_t;
 
-            let mut is_open = true;
+            let is_open = true;
 
             let ranges_ask_prem = &PAIRMM_CONF.open_ranges;
             // get_target_prem_by_ranges("sell", ranges_asks, -f, is_open);
