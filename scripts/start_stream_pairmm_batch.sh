@@ -23,6 +23,8 @@ Defaults:
 Examples:
   ./scripts/start_stream_pairmm_batch.sh
   ./scripts/start_stream_pairmm_batch.sh --profile okex-futures-binance-futures
+  ./scripts/start_stream_pairmm_batch.sh --profile binance-margin-binance-futures
+  ./scripts/start_stream_pairmm_batch.sh --profile binance-futures-binance-futures
   ./scripts/start_stream_pairmm_batch.sh --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures
   ./scripts/start_stream_pairmm_batch.sh --highres-config ./highres_two_exchange.toml
   ./scripts/start_stream_pairmm_batch.sh --log-dir ./logs/stream_pairmm_batch

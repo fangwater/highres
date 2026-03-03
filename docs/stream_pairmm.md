@@ -49,13 +49,16 @@ max_close_order_keep_s = 30
 ```bash
 # 部署单套（双所）
 bash scripts/deploy_stream_pairmm.sh --profile okex-futures-binance-futures
+bash scripts/deploy_stream_pairmm.sh --profile binance-margin-binance-futures
 
 # 部署单套（单所）
 bash scripts/deploy_stream_pairmm.sh --profile binance-futures-binance-futures
 
-# 一次部署两套
+# 一次部署全部三套
 bash scripts/deploy_all_target.sh
 ```
+
+说明：单所 profile 采用 repeat 形式（同一上游重复两次），例如 `binance-futures-binance-futures`。
 
 ## 5. 启动方式（仅 Batch）
 

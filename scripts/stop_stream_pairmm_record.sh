@@ -12,6 +12,8 @@ Usage:
 Examples:
   ./scripts/stop_stream_pairmm_record.sh
   ./scripts/stop_stream_pairmm_record.sh --profile okex-futures-binance-futures
+  ./scripts/stop_stream_pairmm_record.sh --profile binance-margin-binance-futures
+  ./scripts/stop_stream_pairmm_record.sh --profile binance-futures-binance-futures
   ./scripts/stop_stream_pairmm_record.sh --name stream_pairmm_record
 EOF
 }

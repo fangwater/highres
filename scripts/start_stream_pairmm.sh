@@ -11,6 +11,7 @@ Usage:
 
 Examples:
   ./scripts/start_stream_pairmm.sh --ipc /tmp/mth_pubs/okex-futures-binance-futures/SOLUSDT.ipc
+  ./scripts/start_stream_pairmm.sh --ipc /tmp/mth_pubs/binance-margin-binance-futures/SOLUSDT.ipc
   ./scripts/start_stream_pairmm.sh --ipc /tmp/mth_pubs/okex-futures-binance-futures/SOLUSDT.ipc --name stream_pairmm_sol
 EOF
 }

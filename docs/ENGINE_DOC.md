@@ -36,6 +36,7 @@ Use unified deployment scripts only:
 
 - Single target:
   - `bash scripts/deploy_stream_pairmm.sh --profile okex-futures-binance-futures`
+  - `bash scripts/deploy_stream_pairmm.sh --profile binance-margin-binance-futures`
   - `bash scripts/deploy_stream_pairmm.sh --profile binance-futures-binance-futures`
 - All targets:
   - `bash scripts/deploy_all_target.sh`

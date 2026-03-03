@@ -7,7 +7,7 @@ BIN_NAMES=(
   "stream_pairmm_record"
   "pnlu_factor_stream"
 )
-SUPPORTED_PROFILES=("okex-futures-binance-futures" "binance-futures-binance-futures")
+SUPPORTED_PROFILES=("okex-futures-binance-futures" "binance-margin-binance-futures" "binance-futures-binance-futures")
 
 resolve_first_existing() {
   local rel=""
@@ -28,7 +28,7 @@ resolve_stream_sources() {
   local -a highres_candidates=()
 
   case "$profile" in
-    okex-futures-binance-futures)
+    okex-futures-binance-futures|binance-margin-binance-futures)
       config_candidates=("config.${profile}.toml" "config_two_exchange.toml" "config.toml")
       highres_candidates=("highres.${profile}.toml" "highres_two_exchange.toml" "highres.toml")
       ;;
@@ -97,11 +97,13 @@ Defaults:
   --base-dir  /home/u171/mth_pub
   --profile   required, values:
               okex-futures-binance-futures
+              binance-margin-binance-futures
               binance-futures-binance-futures
   --dir       optional, override final target dir for this profile only
 
 Examples:
   bash scripts/deploy_stream_pairmm.sh --profile okex-futures-binance-futures
+  bash scripts/deploy_stream_pairmm.sh --profile binance-margin-binance-futures
   bash scripts/deploy_stream_pairmm.sh --profile binance-futures-binance-futures
   bash scripts/deploy_stream_pairmm.sh --profile okex-futures-binance-futures --base-dir "/home/u171/mth_pub"
   bash scripts/deploy_stream_pairmm.sh --profile binance-futures-binance-futures --dir "/home/u171/mth_pub-binance-futures-binance-futures"

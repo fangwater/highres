@@ -14,12 +14,13 @@ Examples:
   ./scripts/export_stream_pairmm_record.sh --all
   ./scripts/export_stream_pairmm_record.sh --symbol SOLUSDT
   ./scripts/export_stream_pairmm_record.sh --profile okex-futures-binance-futures --symbol SOLUSDT
+  ./scripts/export_stream_pairmm_record.sh --profile binance-margin-binance-futures --symbol SOLUSDT
   ./scripts/export_stream_pairmm_record.sh --db-root /mnt/data/data/record_persist/pairmm/okex-futures-binance-futures --all
   ./scripts/export_stream_pairmm_record.sh --symbol SOLUSDT --out-dir ./exports
 EOF
 }
 
-SUPPORTED_PROFILES=("okex-futures-binance-futures" "binance-futures-binance-futures")
+SUPPORTED_PROFILES=("okex-futures-binance-futures" "binance-margin-binance-futures" "binance-futures-binance-futures")
 
 infer_profile_from_base_dir() {
   local base_name=""

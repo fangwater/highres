@@ -12,6 +12,7 @@ Usage:
 Examples:
   ./scripts/start_stream_pairmm_record.sh
   ./scripts/start_stream_pairmm_record.sh --profile okex-futures-binance-futures
+  ./scripts/start_stream_pairmm_record.sh --profile binance-margin-binance-futures
   ./scripts/start_stream_pairmm_record.sh --profile binance-futures-binance-futures
   ./scripts/start_stream_pairmm_record.sh --name stream_pairmm_record
 EOF
