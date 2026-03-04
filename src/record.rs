@@ -1,4 +1,4 @@
-use std::fs::{create_dir_all, OpenOptions};
+use std::fs::create_dir_all;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -6,8 +6,6 @@ use log::warn;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 
-use crate::gconf::ENGIN_CONF;
-use csv::WriterBuilder;
 #[path = "record_types.rs"]
 mod record_types;
 pub use record_types::{RecordDumpItem, TSRecordItem};
@@ -87,78 +85,37 @@ fn init_record_pub(ipc_path: &str) -> Result<(), zmq::Error> {
 }
 
 pub fn write_to_csv(rd: &RecordDumpItem) {
-    if let Some(publisher) = RECORD_PUB.get() {
-        if let Ok(payload) = serde_json::to_vec(rd) {
-            if publisher.lock().send(b"orders", &payload).is_ok() {
-                return;
+    let payload = match serde_json::to_vec(rd) {
+        Ok(v) => v,
+        Err(err) => {
+            warn!("record serialize orders failed: {}", err);
+            return;
+        }
+    };
+    match RECORD_PUB.get() {
+        Some(publisher) => {
+            if let Err(err) = publisher.lock().send(b"orders", &payload) {
+                warn!("record pub send orders failed: {}", err);
             }
         }
-        warn!("record pub send failed, fallback to csv");
+        None => warn!("record pub not initialized, drop orders record"),
     }
-    let dir = ENGIN_CONF.dump_path.to_string();
-    let _ = create_dir_all(&dir);
-    let file_name = dir + "/" + &rd.symbol + "_orders.csv";
-    // let mut csv_writer = Writer::from_path(file_name).expect("Failed to create CSV writer");
-
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&file_name)
-        .unwrap();
-
-    let mut csv_writer = WriterBuilder::new().from_writer(file);
-    //create_ts:pitem.create_ts,update_ts:update_ts_ms,client_order_id:pitem.client_order_id.to_string(),symbol:tinfo.symbol.to_string(), sid:*sid, side:side.to_string(), price:pitem.price, amount_init:pitem.amount_init, amount_update:pitem.amount, status:status
-    let _ = csv_writer.write_record(&[
-        rd.client_order_id.clone(),
-        rd.create_ts.to_string(),
-        rd.update_ts.to_string(),
-        rd.client_order_id.clone(),
-        rd.symbol.to_string(),
-        rd.ttype.to_string(),
-        rd.sid.to_string(),
-        rd.side.to_string(),
-        rd.price.to_string(),
-        rd.amount_init.to_string(),
-        rd.amount_update.to_string(),
-        rd.status.to_string(),
-        rd.inpos.to_string(),
-        rd.tlen.to_string(),
-        rd.from_key.to_string(),
-        rd.bid1.to_string(),
-        rd.ask1.to_string(),
-    ]);
-    let _ = csv_writer.flush();
 }
 
 pub fn write_to_csv_ts(rd: &TSRecordItem) {
-    if let Some(publisher) = RECORD_PUB.get() {
-        if let Ok(payload) = serde_json::to_vec(rd) {
-            if publisher.lock().send(b"nps", &payload).is_ok() {
-                return;
+    let payload = match serde_json::to_vec(rd) {
+        Ok(v) => v,
+        Err(err) => {
+            warn!("record serialize nps failed: {}", err);
+            return;
+        }
+    };
+    match RECORD_PUB.get() {
+        Some(publisher) => {
+            if let Err(err) = publisher.lock().send(b"nps", &payload) {
+                warn!("record pub send nps failed: {}", err);
             }
         }
-        warn!("record pub send failed, fallback to csv");
+        None => warn!("record pub not initialized, drop nps record"),
     }
-    let dir = ENGIN_CONF.dump_path.to_string();
-    let _ = create_dir_all(&dir);
-    let file_name = dir + "/" + &rd.symbol + "_nps.csv";
-    // let mut csv_writer = Writer::from_path(file_name).expect("Failed to create CSV writer");
-
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(file_name)
-        .unwrap();
-
-    let mut csv_writer = WriterBuilder::new().from_writer(file);
-
-    //create_ts:pitem.create_ts,update_ts:update_ts_ms,client_order_id:pitem.client_order_id.to_string(),symbol:tinfo.symbol.to_string(), sid:*sid, side:side.to_string(), price:pitem.price, amount_init:pitem.amount_init, amount_update:pitem.amount, status:status
-    let _ = csv_writer.write_record(&[
-        rd.create_ts.to_string(),
-        rd.symbol.to_string(),
-        rd.sid.to_string(),
-        rd.pos.to_string(),
-        rd.open.to_string(),
-    ]);
-    let _ = csv_writer.flush();
 }
