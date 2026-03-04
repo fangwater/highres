@@ -4,17 +4,34 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+SUPPORTED_PROFILES=(
+  "okex-futures-binance-futures"
+  "binance-margin-binance-futures"
+  "binance-futures-binance-futures"
+)
+
+is_supported_profile() {
+  local profile="$1"
+  local p
+  for p in "${SUPPORTED_PROFILES[@]}"; do
+    if [[ "$p" == "$profile" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 usage() {
   cat <<'EOF'
 Usage:
-  stop_stream_pairmm_record.sh [--name <pm2_name>] [--profile <name>]
+  stop_stream_pairmm_record.sh [--name <pm2_name>] [--profile <name>] [--all]
 
 Examples:
   ./scripts/stop_stream_pairmm_record.sh
   ./scripts/stop_stream_pairmm_record.sh --profile okex-futures-binance-futures
   ./scripts/stop_stream_pairmm_record.sh --profile binance-margin-binance-futures
   ./scripts/stop_stream_pairmm_record.sh --profile binance-futures-binance-futures
-  ./scripts/stop_stream_pairmm_record.sh --name stream_pairmm_record
+  ./scripts/stop_stream_pairmm_record.sh --all
 EOF
 }
 
@@ -25,6 +42,7 @@ fi
 
 NAME_OVERRIDE=""
 PROFILE=""
+STOP_ALL="0"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --name)
@@ -45,6 +63,10 @@ while [[ $# -gt 0 ]]; do
       fi
       shift 2
       ;;
+    --all)
+      STOP_ALL="1"
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -56,6 +78,24 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$STOP_ALL" == "1" ]] && ([[ -n "$NAME_OVERRIDE" ]] || [[ -n "$PROFILE" ]]); then
+  echo "[ERROR] --all cannot be used with --name/--profile" >&2
+  exit 1
+fi
+
+if [[ "$STOP_ALL" == "1" ]]; then
+  for p in "${SUPPORTED_PROFILES[@]}"; do
+    "$0" --profile "$p"
+  done
+  exit 0
+fi
+
+if [[ -n "$PROFILE" ]] && ! is_supported_profile "$PROFILE"; then
+  echo "[ERROR] unsupported --profile: ${PROFILE}" >&2
+  echo "[ERROR] supported: ${SUPPORTED_PROFILES[*]}" >&2
+  exit 1
+fi
 
 if [[ -n "$NAME_OVERRIDE" ]]; then
   NAME="$NAME_OVERRIDE"

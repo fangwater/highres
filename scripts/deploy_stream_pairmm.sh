@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN_NAME="stream_pairmm"
+STREAM_BIN_NAME="stream_pairmm"
+RECORD_BIN_NAME="stream_pairmm_record"
 SUPPORTED_PROFILES=(
   "okex-futures-binance-futures"
   "binance-margin-binance-futures"
@@ -79,7 +80,8 @@ Defaults:
 
 Notes:
   --dir only works with single --profile mode.
-  This script deploys stream stage only: stream_pairmm + stream batch scripts.
+  This script deploys stream + recorder stage:
+  stream_pairmm, stream_pairmm_record, and related scripts.
 USAGE
 }
 
@@ -165,12 +167,18 @@ if [[ -n "$PROFILE" ]] && ! is_supported_profile "$PROFILE"; then
   exit 1
 fi
 
-echo "[INFO] Building ${BIN_NAME} (release)"
-cargo build --release --bin "$BIN_NAME"
+echo "[INFO] Building ${STREAM_BIN_NAME} and ${RECORD_BIN_NAME} (release)"
+cargo build --release --bin "$STREAM_BIN_NAME" --bin "$RECORD_BIN_NAME"
 
-BIN_PATH="$ROOT_DIR/target/release/$BIN_NAME"
-if [[ ! -x "$BIN_PATH" ]]; then
-  echo "[ERROR] built binary not found: $BIN_PATH" >&2
+STREAM_BIN_PATH="$ROOT_DIR/target/release/$STREAM_BIN_NAME"
+if [[ ! -x "$STREAM_BIN_PATH" ]]; then
+  echo "[ERROR] built stream binary not found: $STREAM_BIN_PATH" >&2
+  exit 1
+fi
+
+RECORD_BIN_PATH="$ROOT_DIR/target/release/$RECORD_BIN_NAME"
+if [[ ! -x "$RECORD_BIN_PATH" ]]; then
+  echo "[ERROR] built recorder binary not found: $RECORD_BIN_PATH" >&2
   exit 1
 fi
 
@@ -193,8 +201,9 @@ deploy_one() {
 
   ssh "$TARGET_HOST" "mkdir -p \"$target_dir/scripts\" \"$target_dir/logs\""
 
-  rsync -a "$BIN_PATH" "$TARGET_HOST:$target_dir/"
-  ssh "$TARGET_HOST" "chmod +x \"$target_dir/$BIN_NAME\""
+  rsync -a "$STREAM_BIN_PATH" "$TARGET_HOST:$target_dir/"
+  rsync -a "$RECORD_BIN_PATH" "$TARGET_HOST:$target_dir/"
+  ssh "$TARGET_HOST" "chmod +x \"$target_dir/$STREAM_BIN_NAME\" \"$target_dir/$RECORD_BIN_NAME\""
 
   rsync -a "$config_src" "$TARGET_HOST:$target_dir/config.toml"
   rsync -a "$highres_src" "$TARGET_HOST:$target_dir/highres.toml"
@@ -214,7 +223,10 @@ deploy_one() {
   for script in \
     start_stream_pairmm.sh \
     start_stream_pairmm_batch.sh \
+    start_stream_pairmm_record.sh \
     stop_stream_pairmm_batch.sh \
+    stop_stream_pairmm_record.sh \
+    export_stream_pairmm_record.sh \
     stream_pairmm_batch_runner.sh; do
     if [[ -f "$ROOT_DIR/scripts/$script" ]]; then
       rsync -a "$ROOT_DIR/scripts/$script" "$TARGET_HOST:$target_dir/scripts/"
@@ -224,7 +236,9 @@ deploy_one() {
 
   echo "[INFO] deployed stream profile=${profile} to ${TARGET_HOST}:${target_dir}"
   echo "[INFO] start: ssh $TARGET_HOST \"cd $target_dir && ./scripts/start_stream_pairmm_batch.sh --profile $profile\""
+  echo "[INFO] rec  : ssh $TARGET_HOST \"cd $target_dir && ./scripts/start_stream_pairmm_record.sh --profile $profile\""
   echo "[INFO] stop : ssh $TARGET_HOST \"cd $target_dir && ./scripts/stop_stream_pairmm_batch.sh --profile $profile\""
+  echo "[INFO] rec  : ssh $TARGET_HOST \"cd $target_dir && ./scripts/stop_stream_pairmm_record.sh --profile $profile\""
 }
 
 if [[ "$DEPLOY_ALL" == "1" ]]; then

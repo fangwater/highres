@@ -108,11 +108,18 @@ fi
 NAMESPACE="$(basename "${BASE_DIR}")"
 
 pm2 delete "$NAME" --namespace "$NAMESPACE" || true
-RECORD_NAME="${NAME}-record"
 STOP_RECORD_SCRIPT="${SCRIPT_DIR}/stop_stream_pairmm_record.sh"
+RECORD_NAME=""
 if [[ -f "$STOP_RECORD_SCRIPT" ]]; then
-  "$STOP_RECORD_SCRIPT" --name "$RECORD_NAME"
+  if [[ -n "$PROFILE" ]]; then
+    RECORD_NAME="stream_pairmm_record-${PROFILE}"
+    "$STOP_RECORD_SCRIPT" --profile "$PROFILE"
+  else
+    RECORD_NAME="${NAME}-record"
+    "$STOP_RECORD_SCRIPT" --name "$RECORD_NAME"
+  fi
 else
+  RECORD_NAME="${NAME}-record"
   pm2 delete "$RECORD_NAME" --namespace "$NAMESPACE" || true
 fi
 

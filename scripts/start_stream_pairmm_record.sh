@@ -24,14 +24,14 @@ is_supported_profile() {
 usage() {
   cat <<'EOF'
 Usage:
-  start_stream_pairmm_record.sh [--name <pm2_name>] [--profile <name>] [--ipc-prefix <ipc>] [--db-root <path>]
+  start_stream_pairmm_record.sh --profile <name> [--name <pm2_name>] [--ipc-prefix <ipc>] [--db-root <path>]
+  start_stream_pairmm_record.sh --all
 
 Examples:
-  ./scripts/start_stream_pairmm_record.sh
   ./scripts/start_stream_pairmm_record.sh --profile okex-futures-binance-futures
   ./scripts/start_stream_pairmm_record.sh --profile binance-margin-binance-futures
   ./scripts/start_stream_pairmm_record.sh --profile binance-futures-binance-futures
-  ./scripts/start_stream_pairmm_record.sh --name stream_pairmm_record
+  ./scripts/start_stream_pairmm_record.sh --all
 EOF
 }
 
@@ -44,8 +44,15 @@ NAME_OVERRIDE=""
 PROFILE=""
 IPC_PREFIX=""
 DB_ROOT=""
+IPC_PREFIX_SET="0"
+DB_ROOT_SET="0"
+START_ALL="0"
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --all)
+      START_ALL="1"
+      shift
+      ;;
     --name)
       NAME_OVERRIDE="${2:-}"
       if [[ -z "$NAME_OVERRIDE" ]]; then
@@ -71,6 +78,7 @@ while [[ $# -gt 0 ]]; do
         usage >&2
         exit 1
       fi
+      IPC_PREFIX_SET="1"
       shift 2
       ;;
     --db-root)
@@ -80,6 +88,7 @@ while [[ $# -gt 0 ]]; do
         usage >&2
         exit 1
       fi
+      DB_ROOT_SET="1"
       shift 2
       ;;
     -h|--help)
@@ -94,31 +103,77 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -n "$PROFILE" ]]; then
-  if ! is_supported_profile "$PROFILE"; then
-    echo "[ERROR] unsupported --profile: ${PROFILE}" >&2
-    echo "[ERROR] supported: ${SUPPORTED_PROFILES[*]}" >&2
+normalize_ipc_prefix() {
+  local ipc="$1"
+  ipc="${ipc#ipc://}"
+  ipc="${ipc%/}"
+  echo "$ipc"
+}
+
+profile_from_ipc_prefix() {
+  local ipc="$1"
+  local normalized=""
+  normalized="$(normalize_ipc_prefix "$ipc")"
+  if [[ -z "$normalized" ]]; then
+    return 1
+  fi
+  basename "$normalized"
+}
+
+if [[ "$START_ALL" == "1" ]]; then
+  if [[ -n "$PROFILE" ]] || [[ -n "$NAME_OVERRIDE" ]] || [[ "$IPC_PREFIX_SET" == "1" ]] || [[ "$DB_ROOT_SET" == "1" ]]; then
+    echo "[ERROR] --all cannot be used with --profile/--name/--ipc-prefix/--db-root" >&2
     exit 1
   fi
+  for p in "${SUPPORTED_PROFILES[@]}"; do
+    echo "[INFO] start recorder profile=${p}"
+    bash "$0" --profile "$p"
+  done
+  exit 0
 fi
 
-if [[ -n "$PROFILE" ]] && [[ -z "$IPC_PREFIX" ]]; then
-  IPC_PREFIX="/tmp/mth_pubs/stream_pairmm/${PROFILE}"
+if [[ -z "$PROFILE" ]]; then
+  echo "[ERROR] --profile is required (or use --all)" >&2
+  usage >&2
+  exit 1
 fi
-if [[ -n "$PROFILE" ]] && [[ -z "$DB_ROOT" ]]; then
-  DB_ROOT="/mnt/data/data/record_persist/pairmm/${PROFILE}"
+
+if ! is_supported_profile "$PROFILE"; then
+  echo "[ERROR] unsupported --profile: ${PROFILE}" >&2
+  echo "[ERROR] supported: ${SUPPORTED_PROFILES[*]}" >&2
+  exit 1
+fi
+
+if [[ "$IPC_PREFIX_SET" == "0" ]]; then
+  IPC_PREFIX="/tmp/mth_pubs/${PROFILE}"
 fi
 
 if [[ -n "$NAME_OVERRIDE" ]]; then
   NAME="$NAME_OVERRIDE"
-elif [[ -n "$PROFILE" ]]; then
-  NAME="stream_pairmm_record-${PROFILE}"
 else
-  NAME="stream_pairmm_record"
+  NAME="stream_pairmm_record-${PROFILE}"
 fi
 
 NAMESPACE="$(basename "${BASE_DIR}")"
-DEFAULT_DB_ROOT="/mnt/data/data/record_persist/pairmm/okex-futures-binance-futures"
+
+IPC_PROFILE="$(profile_from_ipc_prefix "$IPC_PREFIX" || true)"
+if [[ -z "$IPC_PROFILE" ]]; then
+  echo "[ERROR] invalid --ipc-prefix: ${IPC_PREFIX}" >&2
+  exit 1
+fi
+if ! is_supported_profile "$IPC_PROFILE"; then
+  echo "[ERROR] --ipc-prefix profile is unsupported: ${IPC_PROFILE}" >&2
+  echo "[ERROR] supported: ${SUPPORTED_PROFILES[*]}" >&2
+  exit 1
+fi
+if [[ "$IPC_PROFILE" != "$PROFILE" ]]; then
+  echo "[ERROR] --profile (${PROFILE}) does not match --ipc-prefix profile (${IPC_PROFILE})" >&2
+  exit 1
+fi
+
+if [[ "$DB_ROOT_SET" == "0" ]]; then
+  DB_ROOT="/mnt/data/data/record_persist/pairmm/${IPC_PROFILE}"
+fi
 
 BIN_CANDIDATES=(
   "${BASE_DIR}/stream_pairmm_record"
@@ -139,12 +194,7 @@ if [[ -z "$BIN_PATH" ]]; then
 fi
 
 ARGS=()
-if [[ -z "$DB_ROOT" ]]; then
-  DB_ROOT="$DEFAULT_DB_ROOT"
-fi
-if [[ -n "$IPC_PREFIX" ]]; then
-  ARGS+=(--ipc-prefix "$IPC_PREFIX")
-fi
+ARGS+=(--ipc-prefix "$IPC_PREFIX")
 ARGS+=(--db-root "$DB_ROOT")
 
 echo "[INFO] Restarting ${NAME}"
@@ -159,6 +209,9 @@ RUST_LOG="${RUST_LOG:-info}" "${PM2_CMD[@]}"
 
 echo ""
 echo "[INFO] Started: ${NAME}"
+echo "Profile: ${PROFILE}"
+echo "IPC Prefix: ${IPC_PREFIX}"
+echo "DB Root: ${DB_ROOT}"
 echo "Namespace: ${NAMESPACE}"
 echo "Logs: pm2 logs --namespace ${NAMESPACE} ${NAME}"
 echo "Status: pm2 status --namespace ${NAMESPACE}"
