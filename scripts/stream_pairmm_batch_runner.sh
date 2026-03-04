@@ -126,6 +126,13 @@ if [[ ! -f "$HIGHRES_CONFIG_PATH" ]]; then
   exit 1
 fi
 
+IPC_ROOT="${IPC_PREFIX#ipc://}"
+IPC_ROOT="${IPC_ROOT%/}"
+if [[ -z "$IPC_ROOT" ]]; then
+  echo "[ERROR] invalid --ipc-prefix: ${IPC_PREFIX}" >&2
+  exit 1
+fi
+
 if ! [[ "$MAX_LOG_SIZE_MB" =~ ^[0-9]+$ ]] || [[ "$MAX_LOG_SIZE_MB" -le 0 ]]; then
   echo "[ERROR] --max-log-size-mb must be a positive integer" >&2
   exit 1
@@ -298,7 +305,7 @@ on_signal() {
 trap on_signal INT TERM HUP
 
 for symbol in $symbols_raw; do
-  ipc_path="${IPC_PREFIX}/${symbol}.ipc"
+  ipc_path="${IPC_ROOT}/${symbol}.ipc"
   out_log="${LOG_DIR}/${symbol}.out.log"
   err_log="${LOG_DIR}/${symbol}.err.log"
   echo "[INFO] start child symbol=${symbol} ipc=${ipc_path} out=${out_log} err=${err_log}"

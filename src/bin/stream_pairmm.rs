@@ -125,6 +125,19 @@ fn symbol_from_ipc_path(path: &str) -> Option<String> {
     }
 }
 
+fn normalize_ipc_endpoint(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let trimmed = trimmed.trim_end_matches('/');
+    if trimmed.starts_with("ipc://") {
+        Some(trimmed.to_string())
+    } else {
+        Some(format!("ipc://{}", trimmed))
+    }
+}
+
 struct BinaryEvent {
     event: u8,
     side_id: u8,
@@ -423,7 +436,13 @@ fn run_ipc(ipc_path: &str, symbol: &str) {
         warn!("zmq subscribe failed: {}", err);
         return;
     }
-    let endpoint = format!("ipc://{}", ipc_path);
+    let endpoint = match normalize_ipc_endpoint(ipc_path) {
+        Some(v) => v,
+        None => {
+            warn!("invalid ipc path: {}", ipc_path);
+            return;
+        }
+    };
     if let Err(err) = socket.connect(&endpoint) {
         warn!("zmq connect failed: {}", err);
         return;

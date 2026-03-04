@@ -56,10 +56,18 @@ pub fn init_record_pub_from_market_ipc(market_ipc: &str) {
 }
 
 fn record_path_from_market_ipc(market_ipc: &str) -> Option<String> {
-    if !market_ipc.starts_with(MARKET_IPC_PREFIX) {
+    let normalized = market_ipc
+        .trim()
+        .strip_prefix("ipc://")
+        .unwrap_or(market_ipc.trim());
+    let normalized = normalized.trim_end_matches('/');
+    if !normalized.starts_with(MARKET_IPC_PREFIX) {
         return None;
     }
-    let rest = &market_ipc[MARKET_IPC_PREFIX.len()..];
+    let rest = &normalized[MARKET_IPC_PREFIX.len()..];
+    if rest.is_empty() {
+        return None;
+    }
     Some(format!("{}{}", RECORD_IPC_PREFIX, rest))
 }
 

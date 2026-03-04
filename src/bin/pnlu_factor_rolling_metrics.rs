@@ -205,14 +205,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     socket.connect(&endpoint)?;
     info!("subscribe {}", endpoint);
 
-    let mut redis_writer =
-        RedisWriter::connect(&redis_url, &redis_key).unwrap_or_else(|err| {
-            panic!("redis connect failed url={} err={}", redis_url, err)
-        });
-    info!(
-        "redis connected url={} key_suffix={}",
-        redis_url, redis_key
-    );
+    let mut redis_writer = RedisWriter::connect(&redis_url, &redis_key)
+        .unwrap_or_else(|err| panic!("redis connect failed url={} err={}", redis_url, err));
+    info!("redis connected url={} key_suffix={}", redis_url, redis_key);
 
     let mut last_reload = Instant::now();
     let mut last_mtime = file_mtime(&symbols_config_path).ok();
@@ -249,7 +244,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 };
                 if msg.symbol.to_ascii_uppercase().contains("BTC") {
-                    info!("btc factor msg symbol={} factor={:?}", msg.symbol, msg.factor);
+                    info!(
+                        "btc factor msg symbol={} factor={:?}",
+                        msg.symbol, msg.factor
+                    );
                 }
                 if let Some(value) = msg.factor {
                     push_value(state, value);
@@ -299,15 +297,15 @@ fn main() -> Result<(), Box<dyn Error>> {
                     match load_symbol_config(&symbols_config_path) {
                         Ok(mut new_cfg) => {
                             validate_overrides(&new_cfg, &all_symbols)?;
-                            if ensure_symbols_config(&symbols_config_path, &mut new_cfg, &all_symbols)? {
+                            if ensure_symbols_config(
+                                &symbols_config_path,
+                                &mut new_cfg,
+                                &all_symbols,
+                            )? {
                                 last_mtime = file_mtime(&symbols_config_path).ok();
                             }
-                            let _added = apply_config(
-                                &mut cfg,
-                                new_cfg,
-                                &mut states,
-                                &all_symbols,
-                            )?;
+                            let _added =
+                                apply_config(&mut cfg, new_cfg, &mut states, &all_symbols)?;
                             info!("reloaded config {}", symbols_config_path);
                         }
                         Err(err) => warn!("reload config failed: {}", err),
@@ -374,13 +372,26 @@ fn redis_key_from_profile(profile: &str) -> String {
 }
 
 fn sanitize_profile_token(raw: &str) -> String {
-    let t = raw.trim();
-    let t = t.trim_matches('/');
-    let replaced = t.replace('/', "-");
-    if replaced.is_empty() {
+    let t = raw.trim().trim_matches('/');
+    let mut token = t
+        .rsplit('/')
+        .next()
+        .unwrap_or(t)
+        .trim()
+        .trim_end_matches(".toml")
+        .to_lowercase()
+        .replace('_', "-")
+        .replace('/', "-");
+    if let Some((left, right)) = token.split_once('-') {
+        if !right.is_empty() && left.chars().all(|c| c.is_ascii_digit()) {
+            token = right.to_string();
+        }
+    }
+    token = token.trim_matches('-').to_string();
+    if token.is_empty() {
         "default".to_string()
     } else {
-        replaced
+        token
     }
 }
 
@@ -412,10 +423,7 @@ fn load_online_symbols() -> Result<Vec<String>, Box<dyn Error>> {
     Ok(conf.online_symbols.unwrap_or_default())
 }
 
-fn validate_overrides(
-    cfg: &SymbolConfigFile,
-    symbols: &[String],
-) -> Result<(), Box<dyn Error>> {
+fn validate_overrides(cfg: &SymbolConfigFile, symbols: &[String]) -> Result<(), Box<dyn Error>> {
     if let Some(overrides) = cfg.symbols.as_ref() {
         let set: HashSet<&str> = symbols.iter().map(|s| s.as_str()).collect();
         for symbol in overrides.keys() {
@@ -513,10 +521,7 @@ fn compute_quantiles(values: &VecDeque<f64>, quantiles: &[f64]) -> Vec<f64> {
 }
 
 fn normalize_quantiles(raw: Vec<f64>) -> Vec<f64> {
-    let mut qs: Vec<f64> = raw
-        .into_iter()
-        .filter(|v| v.is_finite())
-        .collect();
+    let mut qs: Vec<f64> = raw.into_iter().filter(|v| v.is_finite()).collect();
     qs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(a.total_cmp(b)));
     qs.dedup_by(|a, b| (*a - *b).abs() < f64::EPSILON);
     qs

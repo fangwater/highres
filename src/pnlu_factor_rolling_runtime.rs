@@ -138,9 +138,8 @@ impl RollingRuntime {
         }
         let states = init_states(&cfg, all_symbols)?;
 
-        let redis_writer = RedisWriter::connect(&redis_url, &redis_key).unwrap_or_else(|err| {
-            panic!("redis connect failed url={} err={}", redis_url, err)
-        });
+        let redis_writer = RedisWriter::connect(&redis_url, &redis_key)
+            .unwrap_or_else(|err| panic!("redis connect failed url={} err={}", redis_url, err));
         info!(
             "rolling runtime ready process_cfg={} symbols={} symbols_config={} reload_sec={} redis_url={} redis_key={}",
             process_cfg_path,
@@ -167,13 +166,7 @@ impl RollingRuntime {
         })
     }
 
-    pub fn on_factor_row(
-        &mut self,
-        symbol: &str,
-        ts: i64,
-        target_ts: i64,
-        factor: Option<f64>,
-    ) {
+    pub fn on_factor_row(&mut self, symbol: &str, ts: i64, target_ts: i64, factor: Option<f64>) {
         if let Err(err) = self.maybe_reload() {
             warn!("rolling reload failed: {}", err);
         }
@@ -234,12 +227,7 @@ impl RollingRuntime {
         if ensure_symbols_config(&self.symbols_config_path, &mut new_cfg, &self.all_symbols)? {
             self.last_mtime = file_mtime(&self.symbols_config_path).ok();
         }
-        let _added = apply_config(
-            &mut self.cfg,
-            new_cfg,
-            &mut self.states,
-            &self.all_symbols,
-        )?;
+        let _added = apply_config(&mut self.cfg, new_cfg, &mut self.states, &self.all_symbols)?;
         info!(
             "reloaded rolling config {} (process_cfg={} profile={})",
             self.symbols_config_path,
@@ -292,10 +280,7 @@ fn load_process_config(path: &str) -> Result<RollingProcessConfigFile, Box<dyn E
     Ok(conf)
 }
 
-fn validate_overrides(
-    cfg: &SymbolConfigFile,
-    symbols: &[String],
-) -> Result<(), Box<dyn Error>> {
+fn validate_overrides(cfg: &SymbolConfigFile, symbols: &[String]) -> Result<(), Box<dyn Error>> {
     if let Some(overrides) = cfg.symbols.as_ref() {
         let set: HashSet<&str> = symbols.iter().map(|s| s.as_str()).collect();
         for symbol in overrides.keys() {
@@ -452,12 +437,25 @@ fn redis_key_from_profile(profile: &str) -> String {
 }
 
 fn sanitize_profile_token(raw: &str) -> String {
-    let t = raw.trim();
-    let t = t.trim_matches('/');
-    let replaced = t.replace('/', "-");
-    if replaced.is_empty() {
+    let t = raw.trim().trim_matches('/');
+    let mut token = t
+        .rsplit('/')
+        .next()
+        .unwrap_or(t)
+        .trim()
+        .trim_end_matches(".toml")
+        .to_lowercase()
+        .replace('_', "-")
+        .replace('/', "-");
+    if let Some((left, right)) = token.split_once('-') {
+        if !right.is_empty() && left.chars().all(|c| c.is_ascii_digit()) {
+            token = right.to_string();
+        }
+    }
+    token = token.trim_matches('-').to_string();
+    if token.is_empty() {
         "default".to_string()
     } else {
-        replaced
+        token
     }
 }

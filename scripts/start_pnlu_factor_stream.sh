@@ -4,6 +4,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+normalize_profile_channel() {
+  local raw="$1"
+  local token="$raw"
+  token="${token##*/}"
+  token="${token%.toml}"
+  token="${token,,}"
+  token="${token//_/-}"
+  if [[ "$token" =~ ^[0-9]+-(.+)$ ]]; then
+    token="${BASH_REMATCH[1]}"
+  fi
+  token="${token#-}"
+  token="${token%-}"
+  echo "$token"
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -12,7 +27,11 @@ Usage:
 Examples:
   ./scripts/start_pnlu_factor_stream.sh
   ./scripts/start_pnlu_factor_stream.sh --profile okex-futures-binance-futures
+  ./scripts/start_pnlu_factor_stream.sh --profile 01_okex_futures_binance_futures.toml
+  ./scripts/start_pnlu_factor_stream.sh --profile binance-margin-binance-futures
+  ./scripts/start_pnlu_factor_stream.sh --profile 02_binance_margin_binance_futures
   ./scripts/start_pnlu_factor_stream.sh --profile okex-futures-binance-futures --rolling-config ./pnlu_factor_rolling.toml
+  ./scripts/start_pnlu_factor_stream.sh --profile 03_binance_futures_binance_futures
   ./scripts/start_pnlu_factor_stream.sh --ipc-prefix /tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures
 EOF
 }
@@ -96,8 +115,20 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -n "$PROFILE" ]] && [[ -z "$OUTPUT_IPC_PREFIX" ]]; then
-  OUTPUT_IPC_PREFIX="ipc:///tmp/mth_pubs/pnlu_factor/${PROFILE}.ipc"
+PROFILE_CHANNEL=""
+if [[ -n "$PROFILE" ]]; then
+  PROFILE_CHANNEL="$(normalize_profile_channel "$PROFILE")"
+  if [[ -z "$PROFILE_CHANNEL" ]]; then
+    echo "[ERROR] invalid --profile: ${PROFILE}" >&2
+    exit 1
+  fi
+fi
+
+if [[ -n "$PROFILE_CHANNEL" ]] && [[ -z "$OUTPUT_IPC_PREFIX" ]]; then
+  OUTPUT_IPC_PREFIX="ipc:///tmp/mth_pubs/pnlu_factor/${PROFILE_CHANNEL}.ipc"
+fi
+if [[ -n "$PROFILE_CHANNEL" ]] && [[ -z "$IPC_PREFIX" ]]; then
+  IPC_PREFIX="/tmp/mth_pubs/stream_pairmm/${PROFILE_CHANNEL}"
 fi
 
 NAME="${NAME_OVERRIDE:-pnlu_factor_stream}"

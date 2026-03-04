@@ -163,11 +163,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("online_symbols is empty in config.toml".into());
     }
     info!("symbols={}", symbols.len());
-    let mut rolling_runtime = RollingRuntime::new(
-        &args.rolling_config_path,
-        args.profile.as_deref(),
-        &symbols,
-    )?;
+    let mut rolling_runtime =
+        RollingRuntime::new(&args.rolling_config_path, args.profile.as_deref(), &symbols)?;
 
     if let Some(input_csv) = args.input_csv.as_ref() {
         info!(
@@ -186,9 +183,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let ipc_prefix = args
         .ipc_prefix
+        .or_else(|| args.profile.as_ref().map(|p| input_ipc_from_profile(p)))
         .or_else(|| conf.ipc_prefix.clone())
         .unwrap_or_else(|| DEFAULT_IPC_PREFIX.to_string());
-    info!("stream mode symbols={} ipc_prefix={}", symbols.len(), ipc_prefix);
+    info!(
+        "stream mode symbols={} ipc_prefix={}",
+        symbols.len(),
+        ipc_prefix
+    );
 
     let mut states = HashMap::new();
     for symbol in symbols.iter() {
@@ -332,14 +334,32 @@ fn output_ipc_from_profile(profile: &str) -> String {
     format!("ipc:///tmp/mth_pubs/pnlu_factor/{}.ipc", token)
 }
 
+fn input_ipc_from_profile(profile: &str) -> String {
+    let token = sanitize_profile_token(profile);
+    format!("ipc:///tmp/mth_pubs/stream_pairmm/{}", token)
+}
+
 fn sanitize_profile_token(raw: &str) -> String {
-    let t = raw.trim();
-    let t = t.trim_matches('/');
-    let replaced = t.replace('/', "-");
-    if replaced.is_empty() {
+    let t = raw.trim().trim_matches('/');
+    let mut token = t
+        .rsplit('/')
+        .next()
+        .unwrap_or(t)
+        .trim()
+        .trim_end_matches(".toml")
+        .to_lowercase()
+        .replace('_', "-")
+        .replace('/', "-");
+    if let Some((left, right)) = token.split_once('-') {
+        if !right.is_empty() && left.chars().all(|c| c.is_ascii_digit()) {
+            token = right.to_string();
+        }
+    }
+    token = token.trim_matches('-').to_string();
+    if token.is_empty() {
         "default".to_string()
     } else {
-        replaced
+        token
     }
 }
 

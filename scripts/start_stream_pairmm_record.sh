@@ -4,6 +4,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+SUPPORTED_PROFILES=(
+  "okex-futures-binance-futures"
+  "binance-margin-binance-futures"
+  "binance-futures-binance-futures"
+)
+
+is_supported_profile() {
+  local profile="$1"
+  local p
+  for p in "${SUPPORTED_PROFILES[@]}"; do
+    if [[ "$p" == "$profile" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -76,6 +93,14 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -n "$PROFILE" ]]; then
+  if ! is_supported_profile "$PROFILE"; then
+    echo "[ERROR] unsupported --profile: ${PROFILE}" >&2
+    echo "[ERROR] supported: ${SUPPORTED_PROFILES[*]}" >&2
+    exit 1
+  fi
+fi
 
 if [[ -n "$PROFILE" ]] && [[ -z "$IPC_PREFIX" ]]; then
   IPC_PREFIX="/tmp/mth_pubs/stream_pairmm/${PROFILE}"

@@ -6,12 +6,12 @@ start_date = "20240702"
 end_date = "20240720"
 #symbols = ["AGIXUSDT"]
 symbols = ["DOTUSDT"]
-sids = {0 = {"exchange" = "okx","etype" = "swap"}, 1 = {"exchange" = "binance","etype" = "swap"}}
+sids = {0 = {"exchange" = "binance","etype" = "swap"}, 1 = {"exchange" = "binance","etype" = "swap"}}
 vsids = [0,1]
 #stg = "pairmm" #时序回测 ，要设置 [pairmm] sample_step = 1 里面用到了因子
 #stg = "pairmm_one_exchange_simple" #单交易所简化版 pairmm
 #stg = "pairmm_two_exchange_simple" #双交易所简化版 pairmm，只用 ts
-stg = "pairmm_two_exchange_simple" #双交易所简化版 pairmm，只用 ts
+stg = "pairmm_one_exchange_simple" #单交易所简化版 pairmm，只用 ts
 
 dump_path = "data"
 start_ts=0
