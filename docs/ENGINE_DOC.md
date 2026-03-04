@@ -39,7 +39,7 @@ Use unified deployment scripts only:
   - `bash scripts/deploy_stream_pairmm.sh --profile binance-margin-binance-futures`
   - `bash scripts/deploy_stream_pairmm.sh --profile binance-futures-binance-futures`
 - All targets:
-  - `bash scripts/deploy_all_target.sh`
+  - `bash scripts/deploy_stream_pairmm.sh --all`
 
 Split deployment entrypoints were removed; use the unified deploy scripts above.
 

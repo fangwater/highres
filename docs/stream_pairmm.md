@@ -55,7 +55,7 @@ bash scripts/deploy_stream_pairmm.sh --profile binance-margin-binance-futures
 bash scripts/deploy_stream_pairmm.sh --profile binance-futures-binance-futures
 
 # 一次部署全部三套
-bash scripts/deploy_all_target.sh
+bash scripts/deploy_stream_pairmm.sh --all
 ```
 
 说明：单所 profile 采用 repeat 形式（同一上游重复两次），例如 `binance-futures-binance-futures`。
@@ -66,28 +66,34 @@ bash scripts/deploy_all_target.sh
 
 启动：
 ```bash
-# 双所
-bash scripts/start_stream_pairmm_batch_two_exchange.sh
+# 一次启动全部三套（推荐）
+bash scripts/start_stream_pairmm_batch.sh --all
 
-# 单所
-bash scripts/start_stream_pairmm_batch_one_exchange.sh
+# 按 profile 启动
+bash scripts/start_stream_pairmm_batch.sh --profile okex-futures-binance-futures
+bash scripts/start_stream_pairmm_batch.sh --profile binance-margin-binance-futures
+bash scripts/start_stream_pairmm_batch.sh --profile binance-futures-binance-futures
 ```
 
 停止：
 ```bash
-# 双所
-bash scripts/stop_stream_pairmm_batch_two_exchange.sh
+# 一次停止全部三套（推荐）
+bash scripts/stop_stream_pairmm_batch.sh --all
 
-# 单所
-bash scripts/stop_stream_pairmm_batch_one_exchange.sh
+# 按 profile 停止
+bash scripts/stop_stream_pairmm_batch.sh --profile okex-futures-binance-futures
+bash scripts/stop_stream_pairmm_batch.sh --profile binance-margin-binance-futures
+bash scripts/stop_stream_pairmm_batch.sh --profile binance-futures-binance-futures
 ```
 
 ## 6. 日志
 
 - PM2 只管理 batch 总进程（可用 `pm2 logs` 看调度日志）。
 - 子进程日志按 symbol 分文件，默认目录按进程名隔离：
-  - `logs/stream_pairmm_batch_two_exchange/<SYMBOL>.out.log`
-  - `logs/stream_pairmm_batch_two_exchange/<SYMBOL>.err.log`
-  - `logs/stream_pairmm_batch_one_exchange/<SYMBOL>.out.log`
-  - `logs/stream_pairmm_batch_one_exchange/<SYMBOL>.err.log`
+  - `logs/stream_pairmm_batch-okex-futures-binance-futures/<SYMBOL>.out.log`
+  - `logs/stream_pairmm_batch-okex-futures-binance-futures/<SYMBOL>.err.log`
+  - `logs/stream_pairmm_batch-binance-margin-binance-futures/<SYMBOL>.out.log`
+  - `logs/stream_pairmm_batch-binance-margin-binance-futures/<SYMBOL>.err.log`
+  - `logs/stream_pairmm_batch-binance-futures-binance-futures/<SYMBOL>.out.log`
+  - `logs/stream_pairmm_batch-binance-futures-binance-futures/<SYMBOL>.err.log`
 - 日志会按大小自动轮转，参数由 `--max-log-size-mb / --max-log-files / --rotate-check-sec` 控制。

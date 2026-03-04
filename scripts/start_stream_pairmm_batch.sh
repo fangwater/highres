@@ -4,32 +4,84 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+SUPPORTED_PROFILES=(
+  "okex-futures-binance-futures"
+  "binance-margin-binance-futures"
+  "binance-futures-binance-futures"
+)
+
+is_supported_profile() {
+  local profile="$1"
+  local p
+  for p in "${SUPPORTED_PROFILES[@]}"; do
+    if [[ "$p" == "$profile" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+is_one_exchange_profile() {
+  [[ "$1" == "binance-futures-binance-futures" ]]
+}
+
+default_stream_config_path() {
+  local profile="$1"
+  local profile_path="${BASE_DIR}/config.${profile}.toml"
+  if [[ -f "$profile_path" ]]; then
+    echo "$profile_path"
+    return
+  fi
+  if is_one_exchange_profile "$profile"; then
+    echo "${BASE_DIR}/config_one_exchange.toml"
+  else
+    echo "${BASE_DIR}/config_two_exchange.toml"
+  fi
+}
+
+default_highres_config_path() {
+  local profile="$1"
+  local profile_path="${BASE_DIR}/highres.${profile}.toml"
+  if [[ -f "$profile_path" ]]; then
+    echo "$profile_path"
+    return
+  fi
+  if is_one_exchange_profile "$profile"; then
+    echo "${BASE_DIR}/highres_one_exchange.toml"
+  else
+    echo "${BASE_DIR}/highres_two_exchange.toml"
+  fi
+}
+
 usage() {
   cat <<'EOF'
 Usage:
-  start_stream_pairmm_batch.sh [--profile <name>] [--ipc-prefix <path>] [--name <pm2_name>] [--config <path>] [--highres-config <path>] [--bin <path>] [--log-dir <path>] [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>]
+  start_stream_pairmm_batch.sh --profile <name> [--ipc-prefix <path>] [--name <pm2_name>] [--config <path>] [--highres-config <path>] [--bin <path>] [--log-dir <path>] [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>]
+  start_stream_pairmm_batch.sh --all [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>] [--bin <path>]
 
 Defaults:
-  --profile    (optional) when set, default ipc-prefix/name follow profile
-  --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures
-  --name       stream_pairmm_batch
-  --config     <repo>/config.toml           (online_symbols 配置)
-  --highres-config <repo>/highres.toml      (策略/引擎配置)
+  --profile    (required) one of:
+               okex-futures-binance-futures          (two-exchange)
+               binance-margin-binance-futures        (two-exchange)
+               binance-futures-binance-futures       (one-exchange)
+  --ipc-prefix /tmp/mth_pubs/<profile>
+  --name       stream_pairmm_batch-<profile>
+  --config     <repo>/config.<profile>.toml (if exists)
+               fallback: two-exchange -> config_two_exchange.toml
+                         one-exchange -> config_one_exchange.toml
+  --highres-config <repo>/highres.<profile>.toml (if exists)
+               fallback: two-exchange -> highres_two_exchange.toml
+                         one-exchange -> highres_one_exchange.toml
   --log-dir    <repo>/logs/<pm2_name>
   --max-log-size-mb 200
   --max-log-files   10
   --rotate-check-sec 30
 
 Examples:
-  ./scripts/start_stream_pairmm_batch.sh
   ./scripts/start_stream_pairmm_batch.sh --profile okex-futures-binance-futures
   ./scripts/start_stream_pairmm_batch.sh --profile binance-margin-binance-futures
   ./scripts/start_stream_pairmm_batch.sh --profile binance-futures-binance-futures
-  ./scripts/start_stream_pairmm_batch.sh --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures
-  ./scripts/start_stream_pairmm_batch.sh --highres-config ./highres_two_exchange.toml
-  ./scripts/start_stream_pairmm_batch.sh --log-dir ./logs/stream_pairmm_batch
-  ./scripts/start_stream_pairmm_batch.sh --max-log-size-mb 500 --max-log-files 20
-  ./scripts/start_stream_pairmm_batch.sh --name stream_pairmm_batch_main
+  ./scripts/start_stream_pairmm_batch.sh --all
 EOF
 }
 
@@ -38,21 +90,28 @@ if ! command -v pm2 >/dev/null 2>&1; then
   exit 1
 fi
 
-IPC_PREFIX="/tmp/mth_pubs/okex-futures-binance-futures"
-NAME="stream_pairmm_batch"
 PROFILE=""
+IPC_PREFIX=""
+NAME=""
 IPC_PREFIX_SET="0"
 NAME_SET="0"
-CONFIG_PATH="${BASE_DIR}/config.toml"
-HIGHRES_CONFIG_PATH="${BASE_DIR}/highres.toml"
+CONFIG_PATH=""
+CONFIG_SET="0"
+HIGHRES_CONFIG_PATH=""
+HIGHRES_SET="0"
 BIN_OVERRIDE=""
 LOG_DIR=""
 LOG_DIR_SET="0"
 MAX_LOG_SIZE_MB="200"
 MAX_LOG_FILES="10"
 ROTATE_CHECK_SEC="30"
+START_ALL="0"
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --all)
+      START_ALL="1"
+      shift
+      ;;
     --profile)
       PROFILE="${2:-}"
       if [[ -z "$PROFILE" ]]; then
@@ -89,6 +148,7 @@ while [[ $# -gt 0 ]]; do
         usage >&2
         exit 1
       fi
+      CONFIG_SET="1"
       shift 2
       ;;
     --highres-config)
@@ -98,6 +158,7 @@ while [[ $# -gt 0 ]]; do
         usage >&2
         exit 1
       fi
+      HIGHRES_SET="1"
       shift 2
       ;;
     --bin)
@@ -158,11 +219,53 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -n "$PROFILE" ]] && [[ "$IPC_PREFIX_SET" == "0" ]]; then
+if [[ "$START_ALL" == "1" ]]; then
+  if [[ -n "$PROFILE" ]]; then
+    echo "[ERROR] --all cannot be used with --profile" >&2
+    exit 1
+  fi
+  if [[ "$IPC_PREFIX_SET" == "1" ]] || [[ "$NAME_SET" == "1" ]] || [[ "$CONFIG_SET" == "1" ]] || [[ "$HIGHRES_SET" == "1" ]] || [[ "$LOG_DIR_SET" == "1" ]]; then
+    echo "[ERROR] --all does not accept --ipc-prefix/--name/--config/--highres-config/--log-dir overrides" >&2
+    exit 1
+  fi
+  COMMON_ARGS=(
+    --max-log-size-mb "$MAX_LOG_SIZE_MB"
+    --max-log-files "$MAX_LOG_FILES"
+    --rotate-check-sec "$ROTATE_CHECK_SEC"
+  )
+  if [[ -n "$BIN_OVERRIDE" ]]; then
+    COMMON_ARGS+=(--bin "$BIN_OVERRIDE")
+  fi
+  for p in "${SUPPORTED_PROFILES[@]}"; do
+    echo "[INFO] start stream profile=${p}"
+    bash "$0" --profile "$p" "${COMMON_ARGS[@]}"
+  done
+  exit 0
+fi
+
+if [[ -z "$PROFILE" ]]; then
+  echo "[ERROR] --profile is required" >&2
+  usage >&2
+  exit 1
+fi
+
+if ! is_supported_profile "$PROFILE"; then
+  echo "[ERROR] unsupported --profile: ${PROFILE}" >&2
+  echo "[ERROR] supported: ${SUPPORTED_PROFILES[*]}" >&2
+  exit 1
+fi
+
+if [[ "$IPC_PREFIX_SET" == "0" ]]; then
   IPC_PREFIX="/tmp/mth_pubs/${PROFILE}"
 fi
-if [[ -n "$PROFILE" ]] && [[ "$NAME_SET" == "0" ]]; then
+if [[ "$NAME_SET" == "0" ]]; then
   NAME="stream_pairmm_batch-${PROFILE}"
+fi
+if [[ "$CONFIG_SET" == "0" ]]; then
+  CONFIG_PATH="$(default_stream_config_path "$PROFILE")"
+fi
+if [[ "$HIGHRES_SET" == "0" ]]; then
+  HIGHRES_CONFIG_PATH="$(default_highres_config_path "$PROFILE")"
 fi
 
 if [[ "$LOG_DIR_SET" == "0" ]]; then
@@ -212,37 +315,17 @@ fi
 
 RUST_LOG="${RUST_LOG:-info}" "${PM2_CMD[@]}"
 
-START_RECORD_SCRIPT="${SCRIPT_DIR}/start_stream_pairmm_record.sh"
-if [[ ! -f "$START_RECORD_SCRIPT" ]]; then
-  echo "[ERROR] script not found: ${START_RECORD_SCRIPT}" >&2
-  exit 1
-fi
-
-IPC_PATH="${IPC_PREFIX#ipc://}"
-IPC_PATH="${IPC_PATH%/}"
-if [[ "$IPC_PATH" == /tmp/mth_pubs/* ]]; then
-  IPC_SUFFIX="${IPC_PATH#/tmp/mth_pubs/}"
-else
-  IPC_SUFFIX="$(basename "$IPC_PATH")"
-fi
-if [[ -z "$IPC_SUFFIX" ]]; then
-  echo "[ERROR] failed to derive record ipc suffix from --ipc-prefix: ${IPC_PREFIX}" >&2
-  exit 1
-fi
-
-RECORD_NAME="${NAME}-record"
-RECORD_IPC_PREFIX="/tmp/mth_pubs/stream_pairmm/${IPC_SUFFIX}"
-RECORD_DB_ROOT="/mnt/data/data/record_persist/pairmm/${IPC_SUFFIX}"
-
-"$START_RECORD_SCRIPT" \
-  --name "$RECORD_NAME" \
-  --ipc-prefix "$RECORD_IPC_PREFIX" \
-  --db-root "$RECORD_DB_ROOT"
-
 echo ""
 echo "[INFO] Started: ${NAME}"
+echo "Profile: ${PROFILE}"
+if is_one_exchange_profile "$PROFILE"; then
+  echo "Mode: one-exchange"
+else
+  echo "Mode: two-exchange"
+fi
+echo "IPC: ${IPC_PREFIX}"
+echo "Config: ${CONFIG_PATH}"
+echo "Highres: ${HIGHRES_CONFIG_PATH}"
 echo "Namespace: ${NAMESPACE}"
 echo "Logs: pm2 logs --namespace ${NAMESPACE} ${NAME}"
 echo "Status: pm2 status --namespace ${NAMESPACE}"
-echo "Record: ${NAME}-record"
-echo "Record logs: pm2 logs --namespace ${NAMESPACE} ${NAME}-record"
