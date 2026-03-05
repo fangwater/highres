@@ -114,10 +114,18 @@ profile_from_ipc_prefix() {
   local ipc="$1"
   local normalized=""
   normalized="$(normalize_ipc_prefix "$ipc")"
+  local record_root="/tmp/mth_pubs/stream_pairmm/"
   if [[ -z "$normalized" ]]; then
     return 1
   fi
-  basename "$normalized"
+  if [[ "${normalized}" != ${record_root}* ]]; then
+    return 1
+  fi
+  local profile="${normalized#${record_root}}"
+  if [[ -z "$profile" ]] || [[ "$profile" == *"/"* ]]; then
+    return 1
+  fi
+  echo "$profile"
 }
 
 if [[ "$START_ALL" == "1" ]]; then
@@ -145,7 +153,7 @@ if ! is_supported_profile "$PROFILE"; then
 fi
 
 if [[ "$IPC_PREFIX_SET" == "0" ]]; then
-  IPC_PREFIX="/tmp/mth_pubs/${PROFILE}"
+  IPC_PREFIX="/tmp/mth_pubs/stream_pairmm/${PROFILE}"
 fi
 
 if [[ -n "$NAME_OVERRIDE" ]]; then
