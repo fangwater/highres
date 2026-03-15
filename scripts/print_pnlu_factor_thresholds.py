@@ -69,6 +69,17 @@ def parse_args() -> argparse.Namespace:
         help="scan redis keys by suffix and print all matches",
     )
     p.add_argument(
+        "--scan-count",
+        type=int,
+        default=1000,
+        help="redis SCAN count hint used with --scan-suffix",
+    )
+    p.add_argument(
+        "--limit",
+        type=int,
+        help="maximum number of matched symbols to print when using --scan-suffix",
+    )
+    p.add_argument(
         "--full",
         action="store_true",
         help="print full JSON payload per symbol (one block per key)",
@@ -177,6 +188,35 @@ def print_three_line_table(headers: List[str], rows: List[List[str]]) -> None:
     print(bot_rule)
 
 
+def scan_symbols_by_suffix(
+    rds: Any,
+    suffix: str,
+    scan_count: int,
+    limit: Optional[int],
+) -> List[str]:
+    pattern = f"*{suffix}"
+    cursor = 0
+    symbols: set[str] = set()
+    loops = 0
+
+    while True:
+        cursor, keys = rds.scan(cursor=cursor, match=pattern, count=scan_count)
+        loops += 1
+        for key in keys:
+            if isinstance(key, bytes):
+                key = key.decode("utf-8", "ignore")
+            if key.endswith(suffix):
+                symbols.add(key[: -len(suffix)])
+                if limit is not None and len(symbols) >= limit:
+                    return sorted(symbols)[:limit]
+        if loops % 20 == 0:
+            print(f"Scan progress: loops={loops} matched_symbols={len(symbols)}", file=sys.stderr)
+        if cursor == 0:
+            break
+
+    return sorted(symbols)
+
+
 def main() -> int:
     args = parse_args()
     redis = try_import_redis()
@@ -215,16 +255,17 @@ def main() -> int:
     missing: List[str] = []
 
     if args.scan_suffix:
-        pattern = f"*{suffix}"
-        keys = list(rds.scan_iter(match=pattern))
-        symbols = []
-        for key in keys:
-            if isinstance(key, bytes):
-                key = key.decode("utf-8", "ignore")
-            if not key.endswith(suffix):
-                continue
-            symbols.append(key[: -len(suffix)])
-        symbols.sort()
+        print(
+            f"Scanning keys by suffix with count={args.scan_count}"
+            + (f" limit={args.limit}" if args.limit is not None else ""),
+            file=sys.stderr,
+        )
+        symbols = scan_symbols_by_suffix(
+            rds=rds,
+            suffix=suffix,
+            scan_count=max(args.scan_count, 1),
+            limit=args.limit,
+        )
     else:
         symbols = args.symbol or load_online_symbols()
 
