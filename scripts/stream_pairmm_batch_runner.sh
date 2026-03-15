@@ -7,17 +7,13 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  stream_pairmm_batch_runner.sh [--ipc-prefix <path>] [--config <path>] [--highres-config <path>] [--bin <path>] [--log-dir <path>] [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>]
+  stream_pairmm_batch_runner.sh [--ipc-prefix <path>] [--config <path>] [--highres-config <path>] [--bin <path>]
 
 Defaults:
   --ipc-prefix /tmp/mth_pubs/okex-futures-binance-futures
   --config     <repo>/config.toml       (online_symbols 配置)
   --highres-config <repo>/highres.toml  (策略/引擎配置)
   --bin        auto detect (<repo>/stream_pairmm or <repo>/target/release/stream_pairmm)
-  --log-dir    <repo>/logs/stream_pairmm_batch
-  --max-log-size-mb 200
-  --max-log-files   10
-  --rotate-check-sec 30
 EOF
 }
 
@@ -25,10 +21,7 @@ IPC_PREFIX="/tmp/mth_pubs/okex-futures-binance-futures"
 CONFIG_PATH="${BASE_DIR}/config.toml"
 HIGHRES_CONFIG_PATH="${BASE_DIR}/highres.toml"
 BIN_OVERRIDE=""
-LOG_DIR="${BASE_DIR}/logs/stream_pairmm_batch"
-MAX_LOG_SIZE_MB="200"
-MAX_LOG_FILES="10"
-ROTATE_CHECK_SEC="30"
+PAIRMM_LOG_ROOT="/mnt/data/stream_pairmm"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -68,42 +61,6 @@ while [[ $# -gt 0 ]]; do
       fi
       shift 2
       ;;
-    --log-dir)
-      LOG_DIR="${2:-}"
-      if [[ -z "$LOG_DIR" ]]; then
-        echo "[ERROR] --log-dir requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --max-log-size-mb)
-      MAX_LOG_SIZE_MB="${2:-}"
-      if [[ -z "$MAX_LOG_SIZE_MB" ]]; then
-        echo "[ERROR] --max-log-size-mb requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --max-log-files)
-      MAX_LOG_FILES="${2:-}"
-      if [[ -z "$MAX_LOG_FILES" ]]; then
-        echo "[ERROR] --max-log-files requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --rotate-check-sec)
-      ROTATE_CHECK_SEC="${2:-}"
-      if [[ -z "$ROTATE_CHECK_SEC" ]]; then
-        echo "[ERROR] --rotate-check-sec requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
     -h|--help)
       usage
       exit 0
@@ -132,23 +89,6 @@ if [[ -z "$IPC_ROOT" ]]; then
   echo "[ERROR] invalid --ipc-prefix: ${IPC_PREFIX}" >&2
   exit 1
 fi
-
-if ! [[ "$MAX_LOG_SIZE_MB" =~ ^[0-9]+$ ]] || [[ "$MAX_LOG_SIZE_MB" -le 0 ]]; then
-  echo "[ERROR] --max-log-size-mb must be a positive integer" >&2
-  exit 1
-fi
-if ! [[ "$MAX_LOG_FILES" =~ ^[0-9]+$ ]] || [[ "$MAX_LOG_FILES" -le 0 ]]; then
-  echo "[ERROR] --max-log-files must be a positive integer" >&2
-  exit 1
-fi
-if ! [[ "$ROTATE_CHECK_SEC" =~ ^[0-9]+$ ]] || [[ "$ROTATE_CHECK_SEC" -le 0 ]]; then
-  echo "[ERROR] --rotate-check-sec must be a positive integer" >&2
-  exit 1
-fi
-
-MAX_LOG_SIZE_BYTES=$((MAX_LOG_SIZE_MB * 1024 * 1024))
-
-mkdir -p "$LOG_DIR"
 
 BIN_CANDIDATES=()
 if [[ -n "$BIN_OVERRIDE" ]]; then
@@ -232,55 +172,6 @@ fi
 
 declare -a CHILD_PIDS=()
 declare -A CHILD_SYMBOLS=()
-declare -a LOG_FILES=()
-ROTATOR_PID=""
-
-rotate_file_copytruncate() {
-  local file="$1"
-  local i=0
-  local prev=0
-
-  if [[ ! -f "$file" ]]; then
-    return 0
-  fi
-
-  i="$MAX_LOG_FILES"
-  while [[ "$i" -ge 2 ]]; do
-    prev=$((i - 1))
-    if [[ -f "${file}.${prev}" ]]; then
-      mv -f "${file}.${prev}" "${file}.${i}" || true
-    fi
-    i=$((i - 1))
-  done
-
-  cp -f "$file" "${file}.1" || true
-  : > "$file"
-}
-
-rotate_logs_loop() {
-  local file=""
-  local size=0
-  while true; do
-    sleep "$ROTATE_CHECK_SEC"
-    for file in "${LOG_FILES[@]}"; do
-      if [[ ! -f "$file" ]]; then
-        continue
-      fi
-      size="$(stat -c%s "$file" 2>/dev/null || echo 0)"
-      if [[ "$size" -ge "$MAX_LOG_SIZE_BYTES" ]]; then
-        echo "[INFO] rotate log file=${file} size=${size} threshold=${MAX_LOG_SIZE_BYTES}"
-        rotate_file_copytruncate "$file"
-      fi
-    done
-  done
-}
-
-stop_rotator() {
-  if [[ -n "$ROTATOR_PID" ]] && kill -0 "$ROTATOR_PID" >/dev/null 2>&1; then
-    kill "$ROTATOR_PID" >/dev/null 2>&1 || true
-    wait "$ROTATOR_PID" >/dev/null 2>&1 || true
-  fi
-}
 
 stop_children() {
   local pid
@@ -297,41 +188,32 @@ stop_children() {
 
 on_signal() {
   echo "[INFO] signal received, stopping all stream_pairmm children"
-  stop_rotator
   stop_children
   exit 0
 }
 
 trap on_signal INT TERM HUP
 
+PROFILE_NAME="$(basename "$IPC_ROOT")"
+
 for symbol in $symbols_raw; do
   ipc_path="${IPC_ROOT}/${symbol}.ipc"
-  out_log="${LOG_DIR}/${symbol}.out.log"
-  err_log="${LOG_DIR}/${symbol}.err.log"
-  echo "[INFO] start child symbol=${symbol} ipc=${ipc_path} out=${out_log} err=${err_log}"
+  echo "[INFO] start child symbol=${symbol} ipc=${ipc_path} log_root=${PAIRMM_LOG_ROOT} profile=${PROFILE_NAME}"
 
-  {
-    echo ""
-    echo "===== $(date '+%F %T') start symbol=${symbol} ipc=${ipc_path} highres=${HIGHRES_CONFIG_PATH} ====="
-  } >>"$out_log"
-  {
-    echo ""
-    echo "===== $(date '+%F %T') start symbol=${symbol} ipc=${ipc_path} highres=${HIGHRES_CONFIG_PATH} ====="
-  } >>"$err_log"
-
-  HIGHRES_CONFIG_PATH="$HIGHRES_CONFIG_PATH" RUST_LOG="${RUST_LOG:-info}" "$BIN_PATH" --ipc "$ipc_path" >>"$out_log" 2>>"$err_log" &
+  HIGHRES_CONFIG_PATH="$HIGHRES_CONFIG_PATH" \
+  PAIRMM_LOG_ROOT="$PAIRMM_LOG_ROOT" \
+  PAIRMM_LOG_PROFILE="$PROFILE_NAME" \
+  PAIRMM_LOG_SYMBOL="$symbol" \
+  RUST_LOG="${RUST_LOG:-info}" \
+  "$BIN_PATH" --ipc "$ipc_path" &
   child_pid="$!"
   CHILD_PIDS+=("$child_pid")
   CHILD_SYMBOLS["$child_pid"]="$symbol"
-  LOG_FILES+=("$out_log" "$err_log")
 done
 
-echo "[INFO] stream_pairmm batch runner started (${#CHILD_PIDS[@]} children), log_dir=${LOG_DIR}"
+echo "[INFO] stream_pairmm batch runner started (${#CHILD_PIDS[@]} children)"
 echo "[INFO] highres config: ${HIGHRES_CONFIG_PATH}"
-echo "[INFO] log rotate enabled: max_size_mb=${MAX_LOG_SIZE_MB} keep_files=${MAX_LOG_FILES} check_sec=${ROTATE_CHECK_SEC}"
-
-rotate_logs_loop &
-ROTATOR_PID="$!"
+echo "[INFO] child log root: ${PAIRMM_LOG_ROOT}/${PROFILE_NAME}"
 
 set +e
 wait -n
@@ -352,6 +234,5 @@ if [[ -n "$exited_pid" ]]; then
 else
   echo "[ERROR] child exited (code=${child_code}), stopping remaining children"
 fi
-stop_rotator
 stop_children
 exit 1

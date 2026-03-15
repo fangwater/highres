@@ -22,10 +22,21 @@ mod tprocess;
 mod trade;
 
 use log::{info, warn};
+use log4rs::{
+    append::rolling_file::{
+        policy::compound::{
+            roll::delete::DeleteRoller, trigger::size::SizeTrigger, CompoundPolicy,
+        },
+        RollingFileAppender,
+    },
+    config::{Appender, Config, Root},
+    encode::pattern::PatternEncoder,
+};
 use ordered_float::OrderedFloat;
 use serde::Deserialize;
+use std::fs;
 use std::io::{self, BufRead};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::gconf::ENGIN_CONF;
 use crate::ordertake::add_taking;
@@ -102,6 +113,9 @@ struct Args {
     ipc: Option<String>,
 }
 
+const DEFAULT_LOG_ROOT: &str = "/mnt/data/stream_pairmm";
+const MAX_LOG_SIZE_BYTES: u64 = 20 * 1024 * 1024;
+
 fn parse_args() -> Args {
     let mut ipc = None;
     let mut iter = std::env::args().skip(1);
@@ -123,6 +137,98 @@ fn symbol_from_ipc_path(path: &str) -> Option<String> {
     } else {
         Some(symbol.to_string())
     }
+}
+
+fn sanitize_log_component(raw: &str) -> String {
+    let sanitized: String = raw
+        .trim()
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let sanitized = sanitized.trim_matches('_').trim_matches('.');
+    if sanitized.is_empty() {
+        "unknown".to_string()
+    } else {
+        sanitized.to_string()
+    }
+}
+
+fn profile_from_ipc_path(path: &str) -> Option<String> {
+    let parent = Path::new(path).parent()?;
+    let name = parent.file_name()?.to_string_lossy();
+    let profile = name.trim();
+    if profile.is_empty() {
+        None
+    } else {
+        Some(profile.to_string())
+    }
+}
+
+fn parse_log_level() -> log::LevelFilter {
+    let raw = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    let token = raw.split(',').next().unwrap_or("info").trim().to_ascii_lowercase();
+    match token.as_str() {
+        "trace" => log::LevelFilter::Trace,
+        "debug" => log::LevelFilter::Debug,
+        "warn" => log::LevelFilter::Warn,
+        "error" => log::LevelFilter::Error,
+        "off" => log::LevelFilter::Off,
+        _ => log::LevelFilter::Info,
+    }
+}
+
+fn build_log_path(ipc_path: Option<&str>) -> PathBuf {
+    let root = std::env::var("PAIRMM_LOG_ROOT").unwrap_or_else(|_| DEFAULT_LOG_ROOT.to_string());
+    let profile = std::env::var("PAIRMM_LOG_PROFILE")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| ipc_path.and_then(profile_from_ipc_path))
+        .unwrap_or_else(|| "default".to_string());
+    let symbol = ipc_path
+        .and_then(symbol_from_ipc_path)
+        .or_else(|| {
+            std::env::var("PAIRMM_LOG_SYMBOL")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+        })
+        .unwrap_or_else(|| "stdin".to_string());
+
+    PathBuf::from(root)
+        .join(sanitize_log_component(&profile))
+        .join(format!("{}.log", sanitize_log_component(&symbol)))
+}
+
+fn init_process_logger(ipc_path: Option<&str>) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let log_path = build_log_path(ipc_path);
+    if let Some(parent) = log_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let trigger = SizeTrigger::new(MAX_LOG_SIZE_BYTES);
+    let roller = DeleteRoller::new();
+    let policy = CompoundPolicy::new(Box::new(trigger), Box::new(roller));
+    let appender = RollingFileAppender::builder()
+        .encoder(Box::new(PatternEncoder::new(
+            "{d(%Y-%m-%d %H:%M:%S%.3f)} [{l}] {m}{n}",
+        )))
+        .build(&log_path, Box::new(policy))?;
+
+    let config = Config::builder()
+        .appender(Appender::builder().build("pairmm_file", Box::new(appender)))
+        .build(
+            Root::builder()
+                .appender("pairmm_file")
+                .build(parse_log_level()),
+        )?;
+
+    log4rs::init_config(config)?;
+    Ok(log_path)
 }
 
 fn normalize_ipc_endpoint(raw: &str) -> Option<String> {
@@ -528,7 +634,12 @@ fn main() {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "info");
     }
-    env_logger::init();
+    let args = parse_args();
+    let log_path = init_process_logger(args.ipc.as_deref()).unwrap_or_else(|err| {
+        eprintln!("[ERROR] failed to init rolling logger: {err}");
+        std::process::exit(1);
+    });
+    info!("stream_pairmm logging to {}", log_path.display());
 
     if ENGIN_CONF.stg != "pairmm_two_exchange_simple"
         && ENGIN_CONF.stg != "pairmm_one_exchange_simple"
@@ -546,7 +657,6 @@ fn main() {
     }
     clear_pending();
 
-    let args = parse_args();
     if let Some(ipc_path) = args.ipc {
         init_record_pub_from_market_ipc(&ipc_path);
         let symbol = symbol_from_ipc_path(&ipc_path).unwrap_or_default();

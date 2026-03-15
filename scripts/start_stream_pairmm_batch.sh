@@ -25,6 +25,26 @@ is_one_exchange_profile() {
   [[ "$1" == "binance-futures-binance-futures" ]]
 }
 
+infer_profile_from_base_dir() {
+  local base_name=""
+  base_name="$(basename "$BASE_DIR")"
+
+  if is_supported_profile "$base_name"; then
+    echo "$base_name"
+    return 0
+  fi
+
+  local p=""
+  for p in "${SUPPORTED_PROFILES[@]}"; do
+    if [[ "$base_name" == *"$p" ]]; then
+      echo "$p"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 default_stream_config_path() {
   local profile="$1"
   local profile_path="${BASE_DIR}/config.${profile}.toml"
@@ -56,14 +76,15 @@ default_highres_config_path() {
 usage() {
   cat <<'EOF'
 Usage:
-  start_stream_pairmm_batch.sh --profile <name> [--ipc-prefix <path>] [--name <pm2_name>] [--config <path>] [--highres-config <path>] [--bin <path>] [--log-dir <path>] [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>]
-  start_stream_pairmm_batch.sh --all [--max-log-size-mb <n>] [--max-log-files <n>] [--rotate-check-sec <n>] [--bin <path>]
+  start_stream_pairmm_batch.sh [--profile <name>] [--ipc-prefix <path>] [--name <pm2_name>] [--config <path>] [--highres-config <path>] [--bin <path>]
+  start_stream_pairmm_batch.sh --all [--bin <path>]
 
 Defaults:
-  --profile    (required) one of:
+  --profile    one of:
                okex-futures-binance-futures          (two-exchange)
                binance-margin-binance-futures        (two-exchange)
                binance-futures-binance-futures       (one-exchange)
+               if omitted, infer from current deploy dir name when possible
   --ipc-prefix /tmp/mth_pubs/<profile>
   --name       stream_pairmm_batch-<profile>
   --config     <repo>/config.<profile>.toml (if exists)
@@ -72,10 +93,7 @@ Defaults:
   --highres-config <repo>/highres.<profile>.toml (if exists)
                fallback: two-exchange -> highres_two_exchange.toml
                          one-exchange -> highres_one_exchange.toml
-  --log-dir    <repo>/logs/<pm2_name>
-  --max-log-size-mb 200
-  --max-log-files   10
-  --rotate-check-sec 30
+  子进程日志固定写到 /mnt/data/stream_pairmm/<profile>/<symbol>.log
 
 Examples:
   ./scripts/start_stream_pairmm_batch.sh --profile okex-futures-binance-futures
@@ -100,11 +118,6 @@ CONFIG_SET="0"
 HIGHRES_CONFIG_PATH=""
 HIGHRES_SET="0"
 BIN_OVERRIDE=""
-LOG_DIR=""
-LOG_DIR_SET="0"
-MAX_LOG_SIZE_MB="200"
-MAX_LOG_FILES="10"
-ROTATE_CHECK_SEC="30"
 START_ALL="0"
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -170,43 +183,6 @@ while [[ $# -gt 0 ]]; do
       fi
       shift 2
       ;;
-    --log-dir)
-      LOG_DIR="${2:-}"
-      if [[ -z "$LOG_DIR" ]]; then
-        echo "[ERROR] --log-dir requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      LOG_DIR_SET="1"
-      shift 2
-      ;;
-    --max-log-size-mb)
-      MAX_LOG_SIZE_MB="${2:-}"
-      if [[ -z "$MAX_LOG_SIZE_MB" ]]; then
-        echo "[ERROR] --max-log-size-mb requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --max-log-files)
-      MAX_LOG_FILES="${2:-}"
-      if [[ -z "$MAX_LOG_FILES" ]]; then
-        echo "[ERROR] --max-log-files requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --rotate-check-sec)
-      ROTATE_CHECK_SEC="${2:-}"
-      if [[ -z "$ROTATE_CHECK_SEC" ]]; then
-        echo "[ERROR] --rotate-check-sec requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
     -h|--help)
       usage
       exit 0
@@ -224,15 +200,11 @@ if [[ "$START_ALL" == "1" ]]; then
     echo "[ERROR] --all cannot be used with --profile" >&2
     exit 1
   fi
-  if [[ "$IPC_PREFIX_SET" == "1" ]] || [[ "$NAME_SET" == "1" ]] || [[ "$CONFIG_SET" == "1" ]] || [[ "$HIGHRES_SET" == "1" ]] || [[ "$LOG_DIR_SET" == "1" ]]; then
-    echo "[ERROR] --all does not accept --ipc-prefix/--name/--config/--highres-config/--log-dir overrides" >&2
+  if [[ "$IPC_PREFIX_SET" == "1" ]] || [[ "$NAME_SET" == "1" ]] || [[ "$CONFIG_SET" == "1" ]] || [[ "$HIGHRES_SET" == "1" ]]; then
+    echo "[ERROR] --all does not accept --ipc-prefix/--name/--config/--highres-config overrides" >&2
     exit 1
   fi
-  COMMON_ARGS=(
-    --max-log-size-mb "$MAX_LOG_SIZE_MB"
-    --max-log-files "$MAX_LOG_FILES"
-    --rotate-check-sec "$ROTATE_CHECK_SEC"
-  )
+  COMMON_ARGS=()
   if [[ -n "$BIN_OVERRIDE" ]]; then
     COMMON_ARGS+=(--bin "$BIN_OVERRIDE")
   fi
@@ -244,7 +216,11 @@ if [[ "$START_ALL" == "1" ]]; then
 fi
 
 if [[ -z "$PROFILE" ]]; then
-  echo "[ERROR] --profile is required" >&2
+  PROFILE="$(infer_profile_from_base_dir || true)"
+fi
+
+if [[ -z "$PROFILE" ]]; then
+  echo "[ERROR] --profile is required and could not be inferred from current dir" >&2
   usage >&2
   exit 1
 fi
@@ -266,10 +242,6 @@ if [[ "$CONFIG_SET" == "0" ]]; then
 fi
 if [[ "$HIGHRES_SET" == "0" ]]; then
   HIGHRES_CONFIG_PATH="$(default_highres_config_path "$PROFILE")"
-fi
-
-if [[ "$LOG_DIR_SET" == "0" ]]; then
-  LOG_DIR="${BASE_DIR}/logs/${NAME}"
 fi
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
@@ -303,10 +275,6 @@ PM2_CMD=(
   --ipc-prefix "$IPC_PREFIX"
   --config "$CONFIG_PATH"
   --highres-config "$HIGHRES_CONFIG_PATH"
-  --log-dir "$LOG_DIR"
-  --max-log-size-mb "$MAX_LOG_SIZE_MB"
-  --max-log-files "$MAX_LOG_FILES"
-  --rotate-check-sec "$ROTATE_CHECK_SEC"
 )
 
 if [[ -n "$BIN_OVERRIDE" ]]; then

@@ -19,7 +19,7 @@
 - `cargo run --bin stream_pairmm -- --ipc /tmp/mth_pubs/okex-futures-binance-futures/ETHUSDT.ipc`：本地单路流运行示例。
 - `cargo test`：运行根 crate 测试。
 - `cargo test --manifest-path markets/Cargo.toml`：运行 `markets` 子 crate 测试。
-- `bash scripts/start_stream_pairmm.sh --ipc <path>` / `bash scripts/stop_stream_pairmm.sh`：启动/停止 PM2 托管进程。
+- `bash scripts/start_stream_pairmm_batch.sh --profile <name>` / `bash scripts/stop_stream_pairmm_batch.sh --profile <name>`：按 profile 启动/停止 PM2 托管批量进程。
 
 ## 代码风格与命名规范
 - Rust 使用 2021 edition、4 空格缩进，并保持 `rustfmt` 默认格式。

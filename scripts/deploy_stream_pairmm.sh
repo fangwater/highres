@@ -199,7 +199,7 @@ deploy_one() {
   echo "[INFO] Deploy stream profile=${profile} -> ${TARGET_HOST}:${target_dir}"
   echo "[INFO] stream config=$(basename "$config_src"), highres=$(basename "$highres_src")"
 
-  ssh "$TARGET_HOST" "mkdir -p \"$target_dir/scripts\" \"$target_dir/logs\""
+  ssh "$TARGET_HOST" "mkdir -p \"$target_dir/scripts\""
 
   rsync -a "$STREAM_BIN_PATH" "$TARGET_HOST:$target_dir/"
   rsync -a "$RECORD_BIN_PATH" "$TARGET_HOST:$target_dir/"
@@ -221,7 +221,6 @@ deploy_one() {
   done
 
   for script in \
-    start_stream_pairmm.sh \
     start_stream_pairmm_batch.sh \
     start_stream_pairmm_record.sh \
     stop_stream_pairmm_batch.sh \

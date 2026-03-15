@@ -21,6 +21,26 @@ is_supported_profile() {
   return 1
 }
 
+infer_profile_from_base_dir() {
+  local base_name=""
+  base_name="$(basename "$BASE_DIR")"
+
+  if is_supported_profile "$base_name"; then
+    echo "$base_name"
+    return 0
+  fi
+
+  local p=""
+  for p in "${SUPPORTED_PROFILES[@]}"; do
+    if [[ "$base_name" == *"$p" ]]; then
+      echo "$p"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -89,6 +109,10 @@ if [[ "$STOP_ALL" == "1" ]]; then
     "$0" --profile "$p"
   done
   exit 0
+fi
+
+if [[ -z "$PROFILE" ]] && [[ -z "$NAME_OVERRIDE" ]]; then
+  PROFILE="$(infer_profile_from_base_dir || true)"
 fi
 
 if [[ -n "$PROFILE" ]] && ! is_supported_profile "$PROFILE"; then

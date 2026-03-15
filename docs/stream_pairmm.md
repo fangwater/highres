@@ -89,11 +89,6 @@ bash scripts/stop_stream_pairmm_batch.sh --profile binance-futures-binance-futur
 ## 6. 日志
 
 - PM2 只管理 batch 总进程（可用 `pm2 logs` 看调度日志）。
-- 子进程日志按 symbol 分文件，默认目录按进程名隔离：
-  - `logs/stream_pairmm_batch-okex-futures-binance-futures/<SYMBOL>.out.log`
-  - `logs/stream_pairmm_batch-okex-futures-binance-futures/<SYMBOL>.err.log`
-  - `logs/stream_pairmm_batch-binance-margin-binance-futures/<SYMBOL>.out.log`
-  - `logs/stream_pairmm_batch-binance-margin-binance-futures/<SYMBOL>.err.log`
-  - `logs/stream_pairmm_batch-binance-futures-binance-futures/<SYMBOL>.out.log`
-  - `logs/stream_pairmm_batch-binance-futures-binance-futures/<SYMBOL>.err.log`
-- 日志会按大小自动轮转，参数由 `--max-log-size-mb / --max-log-files / --rotate-check-sec` 控制。
+- 子进程日志由 `stream_pairmm` 自己写到 `/mnt/data/stream_pairmm/<profile>/<SYMBOL>.log`。
+- `/mnt` 保证存在；其余目录不存在时会自动递归创建。
+- 单个日志文件超过 20MB 后会直接删除旧文件并从空文件继续写，只保留最新日志内容。
