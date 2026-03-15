@@ -180,7 +180,7 @@ impl FactorState {
                 );
                 self.add_open_bucket(open_tp, raw_fkey);
             }
-        } else if oid.starts_with('c') && sid == 1 {
+        } else if oid.starts_with('c') {
             let close_fkey = parse_close_fkey(raw_fkey);
             let close_tp = (uts_sec / self.period_s) * self.period_s;
             if let Some(rec) = self.close_by_fkey.get_mut(&close_fkey) {
