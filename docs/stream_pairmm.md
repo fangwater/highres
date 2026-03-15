@@ -42,6 +42,31 @@
 因此 symbol 集合与 `stream_pairmm` 使用的 `config.toml` 严格一一对应。
 启动和停止也固定按 `--profile` 执行，不再支持自定义 pnlu 配置路径或自定义目标目录。
 
+## 1.2 Pnlu Redis Key 规则
+
+`pnlu_factor_stream` 会按 symbol 将 rolling threshold 结果写入 Redis。
+
+统一规则如下：
+
+- Redis key 后缀固定为 `_pnlu_factor_thresholds_<profile>`
+- 最终 Redis key 为 `<SYMBOL>_pnlu_factor_thresholds_<profile>`
+- `<profile>` 与部署 profile 一一对应，当前固定为：
+  - `okex-futures-binance-futures`
+  - `binance-margin-binance-futures`
+  - `binance-futures-binance-futures`
+
+示例：
+
+- `ETHUSDT_pnlu_factor_thresholds_okex-futures-binance-futures`
+- `ETHUSDT_pnlu_factor_thresholds_binance-margin-binance-futures`
+- `ETHUSDT_pnlu_factor_thresholds_binance-futures-binance-futures`
+
+说明：
+
+- 同一 symbol 在不同 profile 下会写入不同 Redis key，不会互相覆盖。
+- Redis value 是 JSON 字符串，包含 `symbol`、`ts`、`target_ts`、`factor`、`quantiles`、`thresholds`、`ready`。
+- 只有形成有效 `factor` 后才会写入 Redis。
+
 ## 2. 关键配置（强调 stg）
 
 `highres.toml` 的 `engin` 段必须设置对应的策略名称：
