@@ -25,6 +25,15 @@ is_one_exchange_profile() {
   [[ "$1" == "binance-futures-binance-futures" ]]
 }
 
+profile_alias() {
+  case "$1" in
+    okex-futures-binance-futures) echo "ok-futures-bn-futures" ;;
+    binance-margin-binance-futures) echo "bn-margin-bn-futures" ;;
+    binance-futures-binance-futures) echo "bn-futures-bn-futures" ;;
+    *) echo "$1" ;;
+  esac
+}
+
 infer_profile_from_base_dir() {
   local base_name=""
   base_name="$(basename "$BASE_DIR")"
@@ -235,7 +244,7 @@ if [[ "$IPC_PREFIX_SET" == "0" ]]; then
   IPC_PREFIX="/tmp/mth_pubs/${PROFILE}"
 fi
 if [[ "$NAME_SET" == "0" ]]; then
-  NAME="stream_pairmm_batch-${PROFILE}"
+  NAME="stream_pairmm_batch-$(profile_alias "$PROFILE")"
 fi
 if [[ "$CONFIG_SET" == "0" ]]; then
   CONFIG_PATH="$(default_stream_config_path "$PROFILE")"
@@ -263,6 +272,7 @@ fi
 NAMESPACE="$(basename "${BASE_DIR}")"
 
 echo "[INFO] Restarting ${NAME}"
+pm2 delete "stream_pairmm_batch-${PROFILE}" --namespace "$NAMESPACE" >/dev/null 2>&1 || true
 pm2 delete "$NAME" --namespace "$NAMESPACE" >/dev/null 2>&1 || true
 
 PM2_CMD=(

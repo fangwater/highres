@@ -41,6 +41,15 @@ infer_profile_from_base_dir() {
   return 1
 }
 
+profile_alias() {
+  case "$1" in
+    okex-futures-binance-futures) echo "ok-futures-bn-futures" ;;
+    binance-margin-binance-futures) echo "bn-margin-bn-futures" ;;
+    binance-futures-binance-futures) echo "bn-futures-bn-futures" ;;
+    *) echo "$1" ;;
+  esac
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -125,13 +134,16 @@ fi
 if [[ -n "$NAME_OVERRIDE" ]]; then
   NAME="$NAME_OVERRIDE"
 elif [[ -n "$PROFILE" ]]; then
-  NAME="stream_pairmm_batch-${PROFILE}"
+  NAME="stream_pairmm_batch-$(profile_alias "$PROFILE")"
 else
   NAME="stream_pairmm_batch"
 fi
 NAMESPACE="$(basename "${BASE_DIR}")"
 
 pm2 delete "$NAME" --namespace "$NAMESPACE" || true
+if [[ -n "$PROFILE" ]]; then
+  pm2 delete "stream_pairmm_batch-${PROFILE}" --namespace "$NAMESPACE" >/dev/null 2>&1 || true
+fi
 STOP_RECORD_SCRIPT="${SCRIPT_DIR}/stop_stream_pairmm_record.sh"
 RECORD_NAME=""
 if [[ -f "$STOP_RECORD_SCRIPT" ]]; then

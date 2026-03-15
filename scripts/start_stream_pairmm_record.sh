@@ -21,6 +21,15 @@ is_supported_profile() {
   return 1
 }
 
+profile_alias() {
+  case "$1" in
+    okex-futures-binance-futures) echo "ok-futures-bn-futures" ;;
+    binance-margin-binance-futures) echo "bn-margin-bn-futures" ;;
+    binance-futures-binance-futures) echo "bn-futures-bn-futures" ;;
+    *) echo "$1" ;;
+  esac
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -159,7 +168,7 @@ fi
 if [[ -n "$NAME_OVERRIDE" ]]; then
   NAME="$NAME_OVERRIDE"
 else
-  NAME="stream_pairmm_record-${PROFILE}"
+  NAME="stream_pairmm_record-$(profile_alias "$PROFILE")"
 fi
 
 NAMESPACE="$(basename "${BASE_DIR}")"
@@ -206,6 +215,7 @@ ARGS+=(--ipc-prefix "$IPC_PREFIX")
 ARGS+=(--db-root "$DB_ROOT")
 
 echo "[INFO] Restarting ${NAME}"
+pm2 delete "stream_pairmm_record-${PROFILE}" --namespace "$NAMESPACE" >/dev/null 2>&1 || true
 pm2 delete "$NAME" --namespace "$NAMESPACE" >/dev/null 2>&1 || true
 
 PM2_CMD=(pm2 start "$BIN_PATH" --name "$NAME" --namespace "$NAMESPACE" --cwd "$BASE_DIR")

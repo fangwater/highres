@@ -17,6 +17,7 @@ use crate::record_types::{RecordDumpItem, TSRecordItem};
 
 const DEFAULT_IPC_PREFIX: &str = "ipc:///tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures";
 const DEFAULT_DB_ROOT: &str = "data/record_persist/pairmm/okex-futures-binance-futures";
+const ZMQ_HWM: i32 = 100_000;
 
 enum Mode {
     Run,
@@ -147,6 +148,7 @@ fn run(ipc_prefix: &str, db_root: &str) -> Result<(), Box<dyn Error>> {
     let prefix = normalize_ipc_prefix(ipc_prefix);
     let ctx = zmq::Context::new();
     let socket = ctx.socket(zmq::SUB)?;
+    socket.set_rcvhwm(ZMQ_HWM)?;
     socket.set_subscribe(b"orders")?;
     socket.set_subscribe(b"nps")?;
 

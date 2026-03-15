@@ -6,6 +6,8 @@ use log::warn;
 use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 
+const ZMQ_HWM: i32 = 100_000;
+
 #[path = "record_types.rs"]
 mod record_types;
 pub use record_types::{RecordDumpItem, TSRecordItem};
@@ -24,6 +26,7 @@ impl RecordPublisher {
     fn new(endpoint: &str) -> Result<Self, zmq::Error> {
         let ctx = Arc::new(zmq::Context::new());
         let socket = ctx.socket(zmq::PUB)?;
+        socket.set_sndhwm(ZMQ_HWM)?;
         socket.bind(endpoint)?;
         Ok(Self { _ctx: ctx, socket })
     }

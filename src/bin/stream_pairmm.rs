@@ -48,6 +48,8 @@ use crate::symbolinfo::get_market;
 use crate::trade::{DepthInfo, TradeInfo};
 use zmq::Message as ZmqMessage;
 
+const ZMQ_HWM: i32 = 100_000;
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "event")]
 enum StreamEvent {
@@ -540,6 +542,10 @@ fn run_ipc(ipc_path: &str, symbol: &str) {
     };
     if let Err(err) = socket.set_subscribe(b"") {
         warn!("zmq subscribe failed: {}", err);
+        return;
+    }
+    if let Err(err) = socket.set_rcvhwm(ZMQ_HWM) {
+        warn!("zmq set rcvhwm failed: {}", err);
         return;
     }
     let endpoint = match normalize_ipc_endpoint(ipc_path) {
