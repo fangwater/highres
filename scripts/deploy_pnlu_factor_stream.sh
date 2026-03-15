@@ -154,7 +154,8 @@ deploy_one() {
   for script in \
     start_pnlu_factor_stream.sh \
     stop_pnlu_factor_stream.sh \
-    print_pnlu_factor_thresholds.py; do
+    print_pnlu_factor_thresholds.py \
+    print_pnlu_factor_ipc.py; do
     if [[ -f "$ROOT_DIR/scripts/$script" ]]; then
       rsync -a "$ROOT_DIR/scripts/$script" "$TARGET_HOST:$target_dir/scripts/"
       ssh "$TARGET_HOST" "chmod +x \"$target_dir/scripts/$script\""
