@@ -21,7 +21,6 @@ use crate::record_types::RecordDumpItem;
 
 const DEFAULT_IPC_PREFIX: &str = "ipc:///tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures";
 const DEFAULT_CONFIG_PATH: &str = "pnlu_factor.toml";
-const DEFAULT_ROLLING_CONFIG_PATH: &str = "pnlu_factor_rolling.toml";
 
 #[derive(Debug, Deserialize)]
 struct FactorStreamConf {
@@ -36,8 +35,6 @@ struct FactorStreamConf {
     #[serde(default = "default_max_keep_periods")]
     max_keep_periods: usize,
     ipc_prefix: Option<String>,
-    output_ipc_prefix: Option<String>,
-    output_topic: Option<String>,
 }
 
 fn default_period_s() -> i64 {
@@ -69,8 +66,6 @@ impl Default for FactorStreamConf {
             shift: default_shift(),
             max_keep_periods: default_max_keep_periods(),
             ipc_prefix: None,
-            output_ipc_prefix: None,
-            output_topic: None,
         }
     }
 }
@@ -80,7 +75,6 @@ struct Args {
     output_ipc_prefix: Option<String>,
     profile: Option<String>,
     config_path: String,
-    rolling_config_path: String,
     input_csv: Option<String>,
     csv_mode: CsvMode,
     tail_minutes: i64,
@@ -147,15 +141,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .output_ipc_prefix
         .clone()
         .or_else(|| args.profile.as_ref().map(|p| output_ipc_from_profile(p)))
-        .or_else(|| conf.output_ipc_prefix.clone())
         .unwrap_or_default();
     if output_endpoint.trim().is_empty() {
         return Err("output_ipc_prefix is required".into());
     }
-    let output_topic = conf
-        .output_topic
-        .clone()
-        .unwrap_or_else(|| "pnlu_factor".to_string());
+    let output_topic = "pnlu_factor".to_string();
     let mut publisher = Publisher::new(&output_endpoint, &output_topic)?;
 
     let symbols = load_online_symbols()?;
@@ -164,7 +154,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     info!("symbols={}", symbols.len());
     let mut rolling_runtime =
-        RollingRuntime::new(&args.rolling_config_path, args.profile.as_deref(), &symbols)?;
+        RollingRuntime::new(&args.config_path, args.profile.as_deref(), &symbols)?;
 
     if let Some(input_csv) = args.input_csv.as_ref() {
         info!(
@@ -259,7 +249,6 @@ fn parse_args() -> Args {
     let mut output_ipc_prefix = None;
     let mut profile = None;
     let mut config_path = DEFAULT_CONFIG_PATH.to_string();
-    let mut rolling_config_path = DEFAULT_ROLLING_CONFIG_PATH.to_string();
     let mut input_csv = None;
     let mut csv_mode = CsvMode::All;
     let mut tail_minutes = 10i64;
@@ -279,11 +268,6 @@ fn parse_args() -> Args {
             "--config" => {
                 if let Some(p) = iter.next() {
                     config_path = p;
-                }
-            }
-            "--rolling-config" => {
-                if let Some(p) = iter.next() {
-                    rolling_config_path = p;
                 }
             }
             "--input-csv" => {
@@ -316,7 +300,6 @@ fn parse_args() -> Args {
         output_ipc_prefix,
         profile,
         config_path,
-        rolling_config_path,
         input_csv,
         csv_mode,
         tail_minutes,
@@ -325,7 +308,7 @@ fn parse_args() -> Args {
 
 fn print_usage() {
     eprintln!(
-        "Usage:\n  pnlu_factor_stream [--ipc-prefix <IPC>] [--output-ipc-prefix <IPC>] [--profile <name>] [--config <PATH>] [--rolling-config <PATH>]\n  pnlu_factor_stream --input-csv <PATH> [--mode <all|live>] [--tail-minutes <N>]"
+        "Usage:\n  pnlu_factor_stream [--ipc-prefix <IPC>] [--output-ipc-prefix <IPC>] [--profile <name>] [--config <PATH>]\n  pnlu_factor_stream --input-csv <PATH> [--mode <all|live>] [--tail-minutes <N>]"
     );
 }
 

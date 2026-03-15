@@ -8,10 +8,39 @@
 - `highres.toml`
 - `config.toml`
 - `pnlu_factor.toml`
-- `pnlu_factor_rolling.toml`
 - `pnlu_factor_rolling_symbols.json`
 
 `stream_pairmm` 会在当前工作目录读取 `highres.toml`。
+`pnlu_factor_stream` 会在同一进程内完成因子计算和 rolling/threshold 写 Redis。
+`pnlu_factor.toml` 同时承载 factor 参数和 rolling/Redis 参数，不再使用独立的 `pnlu_factor_rolling.toml`。
+
+## 1.1 Pnlu Profile 配置
+
+三套 profile 可以各自维护独立的 pnlu 配置文件：
+
+- `pnlu_factor.okex-futures-binance-futures.toml`
+- `pnlu_factor.binance-margin-binance-futures.toml`
+- `pnlu_factor.binance-futures-binance-futures.toml`
+
+对应的 rolling symbol 配置也可以独立：
+
+- `pnlu_factor_rolling_symbols.okex-futures-binance-futures.json`
+- `pnlu_factor_rolling_symbols.binance-margin-binance-futures.json`
+- `pnlu_factor_rolling_symbols.binance-futures-binance-futures.json`
+
+部署时固定同步到对应的 `stream_pairmm` 目录，并覆盖该目录内的：
+
+- `pnlu_factor.toml`
+- `pnlu_factor_rolling_symbols.json`
+
+`pnlu_factor_stream` 启动后直接读取当前目录的：
+
+- `config.toml`
+- `pnlu_factor.toml`
+- `pnlu_factor_rolling_symbols.json`
+
+因此 symbol 集合与 `stream_pairmm` 使用的 `config.toml` 严格一一对应。
+启动和停止也固定按 `--profile` 执行，不再支持自定义 pnlu 配置路径或自定义目标目录。
 
 ## 2. 关键配置（强调 stg）
 
@@ -56,6 +85,18 @@ bash scripts/deploy_stream_pairmm.sh --profile binance-futures-binance-futures
 
 # 一次部署全部三套
 bash scripts/deploy_stream_pairmm.sh --all
+```
+
+Pnlu 独立部署：
+
+```bash
+# 固定部署到对应的 stream_pairmm profile 目录
+bash scripts/deploy_pnlu_factor_stream.sh --profile okex-futures-binance-futures
+bash scripts/deploy_pnlu_factor_stream.sh --profile binance-margin-binance-futures
+bash scripts/deploy_pnlu_factor_stream.sh --profile binance-futures-binance-futures
+
+# 一次部署全部三套
+bash scripts/deploy_pnlu_factor_stream.sh --all
 ```
 
 说明：单所 profile 采用 repeat 形式（同一上游重复两次），例如 `binance-futures-binance-futures`。

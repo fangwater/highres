@@ -15,7 +15,6 @@ const DEFAULT_RELOAD_SEC: u64 = 5;
 pub struct RollingProcessConfigFile {
     pub symbols_config: Option<String>,
     pub reload_sec: Option<u64>,
-    pub log_factor_thresholds: Option<bool>,
     pub log_redis_write_success: Option<bool>,
     pub redis_url: Option<String>,
     pub redis_key: Option<String>,
@@ -94,7 +93,6 @@ impl RedisWriter {
 pub struct RollingRuntime {
     process_cfg_path: String,
     symbols_config_path: String,
-    log_factor_thresholds: bool,
     log_redis_write_success: bool,
     reload_sec: u64,
     profile: Option<String>,
@@ -118,7 +116,6 @@ impl RollingRuntime {
             .clone()
             .unwrap_or_else(|| DEFAULT_SYMBOL_CONFIG.to_string());
         let reload_sec = process_cfg.reload_sec.unwrap_or(DEFAULT_RELOAD_SEC).max(1);
-        let log_factor_thresholds = process_cfg.log_factor_thresholds.unwrap_or(false);
         let log_redis_write_success = process_cfg.log_redis_write_success.unwrap_or(false);
         let redis_url = process_cfg.redis_url.clone().unwrap_or_default();
         if redis_url.trim().is_empty() {
@@ -153,7 +150,6 @@ impl RollingRuntime {
         Ok(Self {
             process_cfg_path: process_cfg_path.to_string(),
             symbols_config_path: symbols_config_path.clone(),
-            log_factor_thresholds,
             log_redis_write_success,
             reload_sec,
             profile: profile.map(|v| v.to_string()),
@@ -193,9 +189,7 @@ impl RollingRuntime {
             "thresholds": state.last_quantiles,
             "ready": state.ready,
         });
-        if self.log_factor_thresholds {
-            info!("{}", payload);
-        }
+        info!("{}", payload);
         match self.redis_writer.write_json(symbol, &payload) {
             Ok(key) => {
                 if self.log_redis_write_success {
@@ -240,9 +234,9 @@ impl RollingRuntime {
 
 fn default_partial(cfg: &SymbolConfigFile) -> SymbolConfigPartial {
     cfg.default.clone().unwrap_or(SymbolConfigPartial {
-        rolling_window: Some(100000),
-        min_periods: Some(10000),
-        quantiles: Some(vec![0.1, 0.5, 0.9]),
+        rolling_window: Some(17280),
+        min_periods: Some(720),
+        quantiles: Some(vec![0.7]),
     })
 }
 
@@ -276,7 +270,8 @@ fn load_symbol_config(path: &str) -> Result<SymbolConfigFile, Box<dyn Error>> {
 fn load_process_config(path: &str) -> Result<RollingProcessConfigFile, Box<dyn Error>> {
     let mut settings = Config::new();
     settings.merge(File::with_name(path).required(true))?;
-    let conf: RollingProcessConfigFile = settings.try_into()?;
+    let raw: config::Value = settings.get("pnlu_factor_rolling")?;
+    let conf: RollingProcessConfigFile = raw.try_into()?;
     Ok(conf)
 }
 
@@ -319,9 +314,9 @@ fn build_symbol_config(
     partial: Option<&SymbolConfigPartial>,
 ) -> SymbolConfig {
     let default = cfg.default.clone().unwrap_or(SymbolConfigPartial {
-        rolling_window: Some(100000),
-        min_periods: Some(10000),
-        quantiles: Some(vec![0.1, 0.5, 0.9]),
+        rolling_window: Some(17280),
+        min_periods: Some(720),
+        quantiles: Some(vec![0.7]),
     });
     let rolling_window = partial
         .and_then(|v| v.rolling_window)

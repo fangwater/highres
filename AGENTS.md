@@ -4,12 +4,12 @@
 本仓库是 Rust 交易回放/流式处理项目，包含多个可执行程序和本地依赖 crate。
 
 - `src/`：核心引擎模块（`lprocess`、`tprocess`、`spending`、`record`、`stg` 等）。
-- `src/bin/`：可执行入口（如 `stream_pairmm`、`stream_pairmm_record`、`pnlu_factor_stream`、`pnlu_factor_rolling_metrics`）。
+- `src/bin/`：可执行入口（如 `stream_pairmm`、`stream_pairmm_record`、`pnlu_factor_stream`）。
 - `src/stgs/`：策略实现（`pairmm`、`pairmm_simple`、`sampling_v6` 等）。
 - `markets/`、`mm_common/`、`market_type/`：主包使用的本地 path crate。
 - `scripts/`：部署、启动、停止、导出脚本（基于 PM2）。
 - `docs/`：格式说明与引擎文档。
-- 配置文件：`highres.toml`、`config.toml`、`pnlu_factor.toml`、`pnlu_factor_rolling.toml`。
+- 配置文件：`highres.toml`、`config.toml`、`pnlu_factor.toml`；仓库内还保留按 profile 维护的 `pnlu_factor.<profile>.toml` 作为部署源文件。
 
 运行产物通常位于 `logs/`、`data/`、`target/`。
 

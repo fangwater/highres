@@ -4,6 +4,32 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+SUPPORTED_PROFILES=(
+  "okex-futures-binance-futures"
+  "binance-margin-binance-futures"
+  "binance-futures-binance-futures"
+)
+
+is_supported_profile() {
+  local profile="$1"
+  local p
+  for p in "${SUPPORTED_PROFILES[@]}"; do
+    if [[ "$p" == "$profile" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+profile_alias() {
+  case "$1" in
+    okex-futures-binance-futures) echo "ok-futures-bn-futures" ;;
+    binance-margin-binance-futures) echo "bn-margin-bn-futures" ;;
+    binance-futures-binance-futures) echo "bn-futures-bn-futures" ;;
+    *) echo "$1" ;;
+  esac
+}
+
 normalize_profile_channel() {
   local raw="$1"
   local token="$raw"
@@ -22,17 +48,14 @@ normalize_profile_channel() {
 usage() {
   cat <<'EOF'
 Usage:
-  start_pnlu_factor_stream.sh [--name <pm2_name>] [--ipc-prefix <ipc>] [--output-ipc-prefix <ipc>] [--profile <name>] [--config <path>] [--rolling-config <path>]
+  start_pnlu_factor_stream.sh --profile <name>
+  start_pnlu_factor_stream.sh --all
 
 Examples:
-  ./scripts/start_pnlu_factor_stream.sh
   ./scripts/start_pnlu_factor_stream.sh --profile okex-futures-binance-futures
-  ./scripts/start_pnlu_factor_stream.sh --profile 01_okex_futures_binance_futures.toml
   ./scripts/start_pnlu_factor_stream.sh --profile binance-margin-binance-futures
-  ./scripts/start_pnlu_factor_stream.sh --profile 02_binance_margin_binance_futures
-  ./scripts/start_pnlu_factor_stream.sh --profile okex-futures-binance-futures --rolling-config ./pnlu_factor_rolling.toml
-  ./scripts/start_pnlu_factor_stream.sh --profile 03_binance_futures_binance_futures
-  ./scripts/start_pnlu_factor_stream.sh --ipc-prefix /tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures
+  ./scripts/start_pnlu_factor_stream.sh --profile binance-futures-binance-futures
+  ./scripts/start_pnlu_factor_stream.sh --all
 EOF
 }
 
@@ -41,63 +64,18 @@ if ! command -v pm2 >/dev/null 2>&1; then
   exit 1
 fi
 
-NAME_OVERRIDE=""
-IPC_PREFIX=""
-OUTPUT_IPC_PREFIX=""
 PROFILE=""
-CONFIG_PATH=""
-ROLLING_CONFIG_PATH=""
+START_ALL="0"
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --name)
-      NAME_OVERRIDE="${2:-}"
-      if [[ -z "$NAME_OVERRIDE" ]]; then
-        echo "[ERROR] --name requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --ipc-prefix)
-      IPC_PREFIX="${2:-}"
-      if [[ -z "$IPC_PREFIX" ]]; then
-        echo "[ERROR] --ipc-prefix requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --output-ipc-prefix)
-      OUTPUT_IPC_PREFIX="${2:-}"
-      if [[ -z "$OUTPUT_IPC_PREFIX" ]]; then
-        echo "[ERROR] --output-ipc-prefix requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
+    --all)
+      START_ALL="1"
+      shift
       ;;
     --profile)
       PROFILE="${2:-}"
       if [[ -z "$PROFILE" ]]; then
         echo "[ERROR] --profile requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --config)
-      CONFIG_PATH="${2:-}"
-      if [[ -z "$CONFIG_PATH" ]]; then
-        echo "[ERROR] --config requires a value" >&2
-        usage >&2
-        exit 1
-      fi
-      shift 2
-      ;;
-    --rolling-config)
-      ROLLING_CONFIG_PATH="${2:-}"
-      if [[ -z "$ROLLING_CONFIG_PATH" ]]; then
-        echo "[ERROR] --rolling-config requires a value" >&2
         usage >&2
         exit 1
       fi
@@ -115,23 +93,49 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-PROFILE_CHANNEL=""
-if [[ -n "$PROFILE" ]]; then
-  PROFILE_CHANNEL="$(normalize_profile_channel "$PROFILE")"
-  if [[ -z "$PROFILE_CHANNEL" ]]; then
-    echo "[ERROR] invalid --profile: ${PROFILE}" >&2
+if [[ "$START_ALL" == "1" ]]; then
+  if [[ -n "$PROFILE" ]]; then
+    echo "[ERROR] --all cannot be used with --profile" >&2
     exit 1
   fi
+  for p in "${SUPPORTED_PROFILES[@]}"; do
+    echo "[INFO] start pnlu factor profile=${p}"
+    bash "$0" --profile "$p"
+  done
+  exit 0
 fi
 
-if [[ -n "$PROFILE_CHANNEL" ]] && [[ -z "$OUTPUT_IPC_PREFIX" ]]; then
-  OUTPUT_IPC_PREFIX="ipc:///tmp/mth_pubs/pnlu_factor/${PROFILE_CHANNEL}.ipc"
-fi
-if [[ -n "$PROFILE_CHANNEL" ]] && [[ -z "$IPC_PREFIX" ]]; then
-  IPC_PREFIX="/tmp/mth_pubs/stream_pairmm/${PROFILE_CHANNEL}"
+PROFILE_CHANNEL=""
+if [[ -z "$PROFILE" ]]; then
+  echo "[ERROR] --profile is required (or use --all)" >&2
+  usage >&2
+  exit 1
 fi
 
-NAME="${NAME_OVERRIDE:-pnlu_factor_stream}"
+PROFILE_CHANNEL="$(normalize_profile_channel "$PROFILE")"
+if [[ -z "$PROFILE_CHANNEL" ]]; then
+  echo "[ERROR] invalid --profile: ${PROFILE}" >&2
+  exit 1
+fi
+if ! is_supported_profile "$PROFILE_CHANNEL"; then
+  echo "[ERROR] unsupported --profile: ${PROFILE}" >&2
+  echo "[ERROR] supported: ${SUPPORTED_PROFILES[*]}" >&2
+  exit 1
+fi
+
+CONFIG_PATH="${BASE_DIR}/pnlu_factor.toml"
+if [[ ! -f "$CONFIG_PATH" ]]; then
+  echo "[ERROR] pnlu_factor.toml not found in ${BASE_DIR}" >&2
+  exit 1
+fi
+if [[ ! -f "${BASE_DIR}/config.toml" ]]; then
+  echo "[ERROR] config.toml not found in ${BASE_DIR}" >&2
+  exit 1
+fi
+
+OUTPUT_IPC_PREFIX="ipc:///tmp/mth_pubs/pnlu_factor/${PROFILE_CHANNEL}.ipc"
+IPC_PREFIX="/tmp/mth_pubs/stream_pairmm/${PROFILE_CHANNEL}"
+NAME="pnlu_factor_stream-$(profile_alias "$PROFILE_CHANNEL")"
 NAMESPACE="$(basename "${BASE_DIR}")"
 
 BIN_CANDIDATES=(
@@ -162,12 +166,7 @@ fi
 if [[ -n "$PROFILE" ]]; then
   ARGS+=(--profile "$PROFILE")
 fi
-if [[ -n "$CONFIG_PATH" ]]; then
-  ARGS+=(--config "$CONFIG_PATH")
-fi
-if [[ -n "$ROLLING_CONFIG_PATH" ]]; then
-  ARGS+=(--rolling-config "$ROLLING_CONFIG_PATH")
-fi
+ARGS+=(--config "$CONFIG_PATH")
 
 echo "[INFO] Restarting ${NAME}"
 pm2 delete "$NAME" --namespace "$NAMESPACE" >/dev/null 2>&1 || true
@@ -181,6 +180,10 @@ RUST_LOG="${RUST_LOG:-info}" "${PM2_CMD[@]}"
 
 echo ""
 echo "[INFO] Started: ${NAME}"
+echo "Profile: ${PROFILE_CHANNEL}"
+echo "Config: ${CONFIG_PATH}"
+echo "Input IPC: ${IPC_PREFIX}"
+echo "Output IPC: ${OUTPUT_IPC_PREFIX}"
 echo "Namespace: ${NAMESPACE}"
 echo "Logs: pm2 logs --namespace ${NAMESPACE} ${NAME}"
 echo "Status: pm2 status --namespace ${NAMESPACE}"

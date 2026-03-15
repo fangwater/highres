@@ -7,7 +7,8 @@ Print pnlu factor thresholds from Redis.
 Reads per-symbol keys:
   <symbol><suffix>
 
-Default redis_url and suffix are loaded from pnlu_factor_rolling.toml.
+Default redis_url is loaded from pnlu_factor.toml [pnlu_factor_rolling].
+Suffix can be passed explicitly or derived from --profile.
 """
 
 from __future__ import annotations
@@ -53,13 +54,14 @@ def load_toml(path: str) -> Dict[str, Any]:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Print pnlu factor thresholds from Redis")
-    p.add_argument("--config", default="pnlu_factor_rolling.toml")
+    p.add_argument("--config", default="pnlu_factor.toml")
     p.add_argument("--redis-url", default=os.environ.get("REDIS_URL"))
     p.add_argument("--host", default=os.environ.get("REDIS_HOST", "127.0.0.1"))
     p.add_argument("--port", type=int, default=int(os.environ.get("REDIS_PORT", 6379)))
     p.add_argument("--db", type=int, default=int(os.environ.get("REDIS_DB", 0)))
     p.add_argument("--password", default=os.environ.get("REDIS_PASSWORD"))
     p.add_argument("--suffix", help="redis key suffix, e.g. _pnlu_factor_thresholds")
+    p.add_argument("--profile", help="profile name used to derive redis key suffix")
     p.add_argument("--symbol", action="append", default=[])
     p.add_argument(
         "--scan-suffix",
@@ -81,10 +83,28 @@ def parse_args() -> argparse.Namespace:
 
 def load_default_redis_conf(config_path: str) -> Dict[str, str]:
     data = load_toml(config_path)
+    section = data.get("pnlu_factor_rolling") or {}
     return {
-        "redis_url": str(data.get("redis_url", "")).strip(),
-        "redis_key": str(data.get("redis_key", "")).strip(),
+        "redis_url": str(section.get("redis_url", "")).strip(),
+        "redis_key": str(section.get("redis_key", "")).strip(),
     }
+
+
+def sanitize_profile_token(raw: str) -> str:
+    token = raw.strip().strip("/")
+    token = token.split("/")[-1]
+    if token.endswith(".toml"):
+        token = token[:-5]
+    token = token.lower().replace("_", "-").replace("/", "-").strip("-")
+    if "-" in token:
+        left, right = token.split("-", 1)
+        if left.isdigit() and right:
+            token = right
+    return token or "default"
+
+
+def suffix_from_profile(profile: str) -> str:
+    return f"_pnlu_factor_thresholds_{sanitize_profile_token(profile)}"
 
 
 def load_online_symbols() -> List[str]:
@@ -166,13 +186,15 @@ def main() -> int:
 
     defaults = load_default_redis_conf(args.config)
     redis_url = args.redis_url or defaults.get("redis_url")
-    suffix = args.suffix or defaults.get("redis_key", "")
+    suffix = args.suffix or (
+        suffix_from_profile(args.profile) if args.profile else defaults.get("redis_key", "")
+    )
 
     if not redis_url:
         print("redis_url is required (config or --redis-url)", file=sys.stderr)
         return 2
     if not suffix:
-        print("redis key suffix is required (config or --suffix)", file=sys.stderr)
+        print("redis key suffix is required (--profile or --suffix)", file=sys.stderr)
         return 2
 
     rds = redis.from_url(redis_url) if redis_url else redis.Redis(
