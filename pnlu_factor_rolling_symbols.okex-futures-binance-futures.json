@@ -2,6 +2,6 @@
   "default": {
     "rolling_window": 17280,
     "min_periods": 720,
-    "quantiles": [0.7]
+    "quantiles": [0.3, 0.7]
   }
 }
