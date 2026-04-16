@@ -5,9 +5,14 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::create_dir_all;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, Instant};
 
+use chrono::Utc;
 use log::{info, warn};
+use parking_lot::Mutex;
 use rocksdb::{
     ColumnFamilyDescriptor, DBCompressionType, Direction, IteratorMode, Options, WriteOptions, DB,
 };
@@ -18,6 +23,7 @@ use crate::record_types::{RecordDumpItem, TSRecordItem};
 const DEFAULT_IPC_PREFIX: &str = "ipc:///tmp/mth_pubs/stream_pairmm/okex-futures-binance-futures";
 const DEFAULT_DB_ROOT: &str = "data/record_persist/pairmm/okex-futures-binance-futures";
 const ZMQ_HWM: i32 = 100_000;
+const DEFAULT_CLEANUP_INTERVAL_SECS: u64 = 7200;
 
 enum Mode {
     Run,
@@ -36,7 +42,14 @@ struct ExportArgs {
 struct Args {
     ipc_prefix: String,
     db_root: String,
+    cleanup: Option<CleanupArgs>,
     mode: Mode,
+}
+
+#[derive(Clone, Copy)]
+struct CleanupArgs {
+    retention_secs: i64,
+    cleanup_interval_secs: u64,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -47,7 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let args = parse_args();
     match args.mode {
-        Mode::Run => run(&args.ipc_prefix, &args.db_root),
+        Mode::Run => run(&args.ipc_prefix, &args.db_root, args.cleanup),
         Mode::Export(cfg) => export_csv(&args.db_root, &cfg),
     }
 }
@@ -55,6 +68,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn parse_args() -> Args {
     let mut ipc_prefix = DEFAULT_IPC_PREFIX.to_string();
     let mut db_root = DEFAULT_DB_ROOT.to_string();
+    let mut retention_secs: Option<i64> = None;
+    let mut cleanup_interval_secs = DEFAULT_CLEANUP_INTERVAL_SECS;
     let mut export = false;
     let mut symbol: Option<String> = None;
     let mut kind: Option<String> = None;
@@ -71,6 +86,16 @@ fn parse_args() -> Args {
             }
             "--db-root" => {
                 db_root = iter.next().unwrap_or_default();
+            }
+            "--retention-secs" => {
+                retention_secs = iter.next().and_then(|v| v.parse::<i64>().ok());
+            }
+            "--cleanup-interval-secs" => {
+                cleanup_interval_secs = iter
+                    .next()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .filter(|v| *v > 0)
+                    .unwrap_or(DEFAULT_CLEANUP_INTERVAL_SECS);
             }
             "--export" => {
                 export = true;
@@ -117,16 +142,24 @@ fn parse_args() -> Args {
         Mode::Run
     };
 
+    let cleanup = retention_secs
+        .filter(|v| *v > 0)
+        .map(|retention_secs| CleanupArgs {
+            retention_secs,
+            cleanup_interval_secs,
+        });
+
     Args {
         ipc_prefix,
         db_root,
+        cleanup,
         mode,
     }
 }
 
 fn print_usage() {
     eprintln!(
-        "Usage:\n  stream_pairmm_record [--ipc-prefix <IPC>] [--db-root <DIR>]\n  stream_pairmm_record --export --symbol <SYMBOL> --kind <orders|nps> [--out <PATH>] [--start-ts <TS>] [--end-ts <TS>] [--limit <N>]"
+        "Usage:\n  stream_pairmm_record [--ipc-prefix <IPC>] [--db-root <DIR>] [--retention-secs <N>] [--cleanup-interval-secs <N>]\n  stream_pairmm_record --export --symbol <SYMBOL> --kind <orders|nps> [--out <PATH>] [--start-ts <TS>] [--end-ts <TS>] [--limit <N>]"
     );
 }
 
@@ -138,7 +171,7 @@ fn default_export_path(symbol: &str, kind: &str) -> String {
     }
 }
 
-fn run(ipc_prefix: &str, db_root: &str) -> Result<(), Box<dyn Error>> {
+fn run(ipc_prefix: &str, db_root: &str, cleanup: Option<CleanupArgs>) -> Result<(), Box<dyn Error>> {
     let symbols = load_online_symbols()?;
     if symbols.is_empty() {
         warn!("online_symbols is empty in config.toml");
@@ -158,7 +191,10 @@ fn run(ipc_prefix: &str, db_root: &str) -> Result<(), Box<dyn Error>> {
         info!("subscribe {}", endpoint);
     }
 
-    let mut store = RecordStore::new(db_root);
+    let store = Arc::new(RecordStore::new(db_root));
+    if let Some(cleanup) = cleanup {
+        spawn_cleanup_thread(Arc::clone(&store), symbols.clone(), cleanup);
+    }
     let mut stats = RecvStats::new();
     loop {
         let parts = socket.recv_multipart(0)?;
@@ -199,6 +235,40 @@ fn run(ipc_prefix: &str, db_root: &str) -> Result<(), Box<dyn Error>> {
     }
 }
 
+fn spawn_cleanup_thread(store: Arc<RecordStore>, symbols: Vec<String>, cleanup: CleanupArgs) {
+    info!(
+        "enable record cleanup retention_secs={} cleanup_interval_secs={}",
+        cleanup.retention_secs, cleanup.cleanup_interval_secs
+    );
+
+    run_cleanup_once(&store, &symbols, cleanup, "startup");
+
+    thread::spawn(move || loop {
+        thread::sleep(Duration::from_secs(cleanup.cleanup_interval_secs));
+        run_cleanup_once(&store, &symbols, cleanup, "periodic");
+    });
+}
+
+fn run_cleanup_once(
+    store: &Arc<RecordStore>,
+    symbols: &[String],
+    cleanup: CleanupArgs,
+    reason: &str,
+) {
+    let now_ts_ms = Utc::now().timestamp_millis();
+    let cutoff_ts = now_ts_ms.saturating_sub(cleanup.retention_secs.saturating_mul(1000));
+
+    match store.cleanup_before(symbols, cutoff_ts) {
+        Ok(stats) => {
+            info!(
+                "record cleanup reason={} cutoff_ts={} orders_cleaned={} nps_cleaned={} symbols_touched={}",
+                reason, cutoff_ts, stats.orders_cleaned, stats.nps_cleaned, stats.symbols_touched
+            );
+        }
+        Err(err) => warn!("record cleanup failed reason={} err={}", reason, err),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct OnlineSymbolsConf {
     online_symbols: Option<Vec<String>>,
@@ -225,24 +295,30 @@ fn normalize_ipc_prefix(raw: &str) -> String {
 
 struct RecordStore {
     root: String,
-    dbs: HashMap<String, DB>,
-    seq: u64,
+    dbs: Mutex<HashMap<String, Arc<DB>>>,
+    seq: AtomicU64,
+}
+
+struct CleanupStats {
+    orders_cleaned: usize,
+    nps_cleaned: usize,
+    symbols_touched: usize,
 }
 
 impl RecordStore {
     fn new(root: &str) -> Self {
         Self {
             root: root.trim_end_matches('/').to_string(),
-            dbs: HashMap::new(),
-            seq: 0,
+            dbs: Mutex::new(HashMap::new()),
+            seq: AtomicU64::new(0),
         }
     }
 
-    fn put_orders(&mut self, item: &RecordDumpItem) -> Result<(), Box<dyn Error>> {
+    fn put_orders(&self, item: &RecordDumpItem) -> Result<(), Box<dyn Error>> {
         let ts = record_ts_orders(item);
         let key = self.next_key(ts);
         let payload = serde_json::to_vec(item)?;
-        let db = self.open_db(&item.symbol)?;
+        let db = self.get_or_open_db(&item.symbol, true)?.unwrap();
         let cf = db
             .cf_handle("orders")
             .ok_or("column family orders missing")?;
@@ -252,11 +328,11 @@ impl RecordStore {
         Ok(())
     }
 
-    fn put_nps(&mut self, item: &TSRecordItem) -> Result<(), Box<dyn Error>> {
+    fn put_nps(&self, item: &TSRecordItem) -> Result<(), Box<dyn Error>> {
         let ts = item.create_ts;
         let key = self.next_key(ts);
         let payload = serde_json::to_vec(item)?;
-        let db = self.open_db(&item.symbol)?;
+        let db = self.get_or_open_db(&item.symbol, true)?.unwrap();
         let cf = db.cf_handle("nps").ok_or("column family nps missing")?;
         let mut write_opts = WriteOptions::default();
         write_opts.set_sync(false);
@@ -264,21 +340,95 @@ impl RecordStore {
         Ok(())
     }
 
-    fn open_db(&mut self, symbol: &str) -> Result<&DB, Box<dyn Error>> {
-        if !self.dbs.contains_key(symbol) {
-            let db_path = format!("{}/{}", self.root, symbol);
-            let db = open_db(&db_path)?;
-            self.dbs.insert(symbol.to_string(), db);
+    fn cleanup_before(&self, symbols: &[String], cutoff_ts: i64) -> Result<CleanupStats, Box<dyn Error>> {
+        if cutoff_ts <= 0 {
+            return Ok(CleanupStats {
+                orders_cleaned: 0,
+                nps_cleaned: 0,
+                symbols_touched: 0,
+            });
         }
-        Ok(self.dbs.get(symbol).unwrap())
+
+        let mut stats = CleanupStats {
+            orders_cleaned: 0,
+            nps_cleaned: 0,
+            symbols_touched: 0,
+        };
+        let end_key = cutoff_key(cutoff_ts);
+
+        for symbol in symbols {
+            let Some(db) = self.get_or_open_db(symbol, false)? else {
+                continue;
+            };
+
+            let orders_cleaned = cleanup_cf(&db, "orders", cutoff_ts, &end_key)?;
+            let nps_cleaned = cleanup_cf(&db, "nps", cutoff_ts, &end_key)?;
+            if orders_cleaned || nps_cleaned {
+                stats.symbols_touched += 1;
+                if orders_cleaned {
+                    stats.orders_cleaned += 1;
+                }
+                if nps_cleaned {
+                    stats.nps_cleaned += 1;
+                }
+            }
+        }
+
+        Ok(stats)
     }
 
-    fn next_key(&mut self, ts: i64) -> String {
-        let ts = if ts < 0 { 0 } else { ts };
-        let key = format!("{:020}_{:020}", ts, self.seq);
-        self.seq = self.seq.saturating_add(1);
-        key
+    fn get_or_open_db(
+        &self,
+        symbol: &str,
+        create_if_missing: bool,
+    ) -> Result<Option<Arc<DB>>, Box<dyn Error>> {
+        let mut dbs = self.dbs.lock();
+        if let Some(db) = dbs.get(symbol) {
+            return Ok(Some(Arc::clone(db)));
+        }
+
+        let db_path = format!("{}/{}", self.root, symbol);
+        if !create_if_missing && !Path::new(&db_path).exists() {
+            return Ok(None);
+        }
+
+        let db = Arc::new(open_db(&db_path)?);
+        dbs.insert(symbol.to_string(), Arc::clone(&db));
+        Ok(Some(db))
     }
+
+    fn next_key(&self, ts: i64) -> String {
+        let ts = if ts < 0 { 0 } else { ts };
+        let seq = self.seq.fetch_add(1, Ordering::Relaxed);
+        format!("{:020}_{:020}", ts, seq)
+    }
+}
+
+fn cleanup_cf(db: &DB, cf_name: &str, cutoff_ts: i64, end_key: &str) -> Result<bool, Box<dyn Error>> {
+    let cf = db
+        .cf_handle(cf_name)
+        .ok_or_else(|| format!("column family {} missing", cf_name))?;
+    let mut iter = db.iterator_cf(cf, IteratorMode::Start);
+    let Some(item) = iter.next() else {
+        return Ok(false);
+    };
+    let (first_key, _) = item?;
+    let Some(first_ts) = parse_ts_from_key(&first_key) else {
+        return Ok(false);
+    };
+    if first_ts >= cutoff_ts {
+        return Ok(false);
+    }
+
+    let start_key: &[u8] = b"";
+    let end_key_bytes: &[u8] = end_key.as_bytes();
+    db.delete_range_cf(cf, start_key, end_key_bytes)?;
+    db.compact_range_cf(cf, None::<&[u8]>, Some(end_key_bytes));
+    Ok(true)
+}
+
+fn cutoff_key(ts: i64) -> String {
+    format!("{:020}_", ts.max(0))
 }
 
 struct RecvStats {

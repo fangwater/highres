@@ -10,6 +10,9 @@ SUPPORTED_PROFILES=(
   "binance-futures-binance-futures"
 )
 
+RECORD_RETENTION_SECS=259200
+RECORD_CLEANUP_INTERVAL_SECS=7200
+
 is_supported_profile() {
   local profile="$1"
   local p
@@ -213,6 +216,8 @@ fi
 ARGS=()
 ARGS+=(--ipc-prefix "$IPC_PREFIX")
 ARGS+=(--db-root "$DB_ROOT")
+ARGS+=(--retention-secs "$RECORD_RETENTION_SECS")
+ARGS+=(--cleanup-interval-secs "$RECORD_CLEANUP_INTERVAL_SECS")
 
 echo "[INFO] Restarting ${NAME}"
 pm2 delete "stream_pairmm_record-${PROFILE}" --namespace "$NAMESPACE" >/dev/null 2>&1 || true
@@ -230,6 +235,8 @@ echo "[INFO] Started: ${NAME}"
 echo "Profile: ${PROFILE}"
 echo "IPC Prefix: ${IPC_PREFIX}"
 echo "DB Root: ${DB_ROOT}"
+echo "Retention Secs: ${RECORD_RETENTION_SECS}"
+echo "Cleanup Interval Secs: ${RECORD_CLEANUP_INTERVAL_SECS}"
 echo "Namespace: ${NAMESPACE}"
 echo "Logs: pm2 logs --namespace ${NAMESPACE} ${NAME}"
 echo "Status: pm2 status --namespace ${NAMESPACE}"
