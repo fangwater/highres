@@ -6,6 +6,7 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 SUPPORTED_PROFILES=(
   "okex-futures-binance-futures"
+  "okex-futures-okex-futures"
   "binance-margin-binance-futures"
   "binance-futures-binance-futures"
 )
@@ -22,12 +23,13 @@ is_supported_profile() {
 }
 
 is_one_exchange_profile() {
-  [[ "$1" == "binance-futures-binance-futures" ]]
+  [[ "$1" == "binance-futures-binance-futures" || "$1" == "okex-futures-okex-futures" ]]
 }
 
 profile_alias() {
   case "$1" in
     okex-futures-binance-futures) echo "ok-futures-bn-futures" ;;
+    okex-futures-okex-futures) echo "ok-futures-ok-futures" ;;
     binance-margin-binance-futures) echo "bn-margin-bn-futures" ;;
     binance-futures-binance-futures) echo "bn-futures-bn-futures" ;;
     *) echo "$1" ;;
@@ -91,6 +93,7 @@ Usage:
 Defaults:
   --profile    one of:
                okex-futures-binance-futures          (two-exchange)
+               okex-futures-okex-futures             (one-exchange)
                binance-margin-binance-futures        (two-exchange)
                binance-futures-binance-futures       (one-exchange)
                if omitted, infer from current deploy dir name when possible
@@ -106,6 +109,7 @@ Defaults:
 
 Examples:
   ./scripts/start_stream_pairmm_batch.sh --profile okex-futures-binance-futures
+  ./scripts/start_stream_pairmm_batch.sh --profile okex-futures-okex-futures
   ./scripts/start_stream_pairmm_batch.sh --profile binance-margin-binance-futures
   ./scripts/start_stream_pairmm_batch.sh --profile binance-futures-binance-futures
   ./scripts/start_stream_pairmm_batch.sh --all

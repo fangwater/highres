@@ -6,6 +6,7 @@ STREAM_BIN_NAME="stream_pairmm"
 RECORD_BIN_NAME="stream_pairmm_record"
 SUPPORTED_PROFILES=(
   "okex-futures-binance-futures"
+  "okex-futures-okex-futures"
   "binance-margin-binance-futures"
   "binance-futures-binance-futures"
 )
@@ -22,7 +23,7 @@ is_supported_profile() {
 }
 
 is_one_exchange_profile() {
-  [[ "$1" == "binance-futures-binance-futures" ]]
+  [[ "$1" == "binance-futures-binance-futures" || "$1" == "okex-futures-okex-futures" ]]
 }
 
 resolve_first_existing() {
@@ -75,6 +76,7 @@ Defaults:
   --base-dir  /home/u171/mth_pub
   --profile   one of:
               okex-futures-binance-futures
+              okex-futures-okex-futures
               binance-margin-binance-futures
               binance-futures-binance-futures
 

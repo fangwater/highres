@@ -6,6 +6,7 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 SUPPORTED_PROFILES=(
   "okex-futures-binance-futures"
+  "okex-futures-okex-futures"
   "binance-margin-binance-futures"
   "binance-futures-binance-futures"
 )
@@ -24,6 +25,7 @@ is_supported_profile() {
 profile_alias() {
   case "$1" in
     okex-futures-binance-futures) echo "ok-futures-bn-futures" ;;
+    okex-futures-okex-futures) echo "ok-futures-ok-futures" ;;
     binance-margin-binance-futures) echo "bn-margin-bn-futures" ;;
     binance-futures-binance-futures) echo "bn-futures-bn-futures" ;;
     *) echo "$1" ;;
@@ -38,6 +40,7 @@ Usage:
 
 Examples:
   ./scripts/stop_pnlu_factor_stream.sh --profile okex-futures-binance-futures
+  ./scripts/stop_pnlu_factor_stream.sh --profile okex-futures-okex-futures
   ./scripts/stop_pnlu_factor_stream.sh --profile binance-margin-binance-futures
   ./scripts/stop_pnlu_factor_stream.sh --profile binance-futures-binance-futures
   ./scripts/stop_pnlu_factor_stream.sh --all

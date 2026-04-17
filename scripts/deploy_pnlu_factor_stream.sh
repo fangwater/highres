@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_NAME="pnlu_factor_stream"
 SUPPORTED_PROFILES=(
   "okex-futures-binance-futures"
+  "okex-futures-okex-futures"
   "binance-margin-binance-futures"
   "binance-futures-binance-futures"
 )

@@ -22,6 +22,7 @@ from typing import Any, Dict, Optional
 
 SUPPORTED_PROFILES = (
     "okex-futures-binance-futures",
+    "okex-futures-okex-futures",
     "binance-margin-binance-futures",
     "binance-futures-binance-futures",
 )

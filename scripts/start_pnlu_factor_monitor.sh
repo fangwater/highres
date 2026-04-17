@@ -6,6 +6,7 @@ BASE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 SUPPORTED_PROFILES=(
   "okex-futures-binance-futures"
+  "okex-futures-okex-futures"
   "binance-margin-binance-futures"
   "binance-futures-binance-futures"
 )
@@ -28,6 +29,7 @@ Usage:
 
 Examples:
   ./scripts/start_pnlu_factor_monitor.sh --profile okex-futures-binance-futures
+  ./scripts/start_pnlu_factor_monitor.sh --profile okex-futures-okex-futures
   ./scripts/start_pnlu_factor_monitor.sh --profile okex-futures-binance-futures --host 0.0.0.0 --port 8765
 EOF
 }
