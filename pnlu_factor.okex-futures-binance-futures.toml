@@ -7,4 +7,4 @@ max_keep_periods = 360
 
 [pnlu_factor_rolling]
 symbols_config = "pnlu_factor_rolling_symbols.json"
-redis_url = "redis://54.64.147.69:4190/0"
+redis_url = "redis://47.238.128.48:4190/0"

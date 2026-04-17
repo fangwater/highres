@@ -49,6 +49,7 @@ struct SymbolState {
 }
 
 struct RedisWriter {
+    redis_url: String,
     client: redis::Client,
     key_suffix: String,
     conn: Option<redis::Connection>,
@@ -57,12 +58,34 @@ struct RedisWriter {
 impl RedisWriter {
     fn connect(url: &str, key: &str) -> Result<Self, Box<dyn Error>> {
         let client = redis::Client::open(url)?;
-        let conn = Some(client.get_connection()?);
         Ok(Self {
+            redis_url: url.to_string(),
             client,
             key_suffix: key.to_string(),
-            conn,
+            conn: None,
         })
+    }
+
+    fn ensure_conn(&mut self) -> Result<&mut redis::Connection, Box<dyn Error>> {
+        if self.conn.is_none() {
+            match self.client.get_connection() {
+                Ok(conn) => {
+                    info!("redis connected url={}", self.redis_url);
+                    self.conn = Some(conn);
+                }
+                Err(err) => {
+                    return Err(format!(
+                        "redis connect failed url={} err={}",
+                        self.redis_url, err
+                    )
+                    .into())
+                }
+            }
+        }
+        match self.conn.as_mut() {
+            Some(conn) => Ok(conn),
+            None => Err("redis connection unavailable".into()),
+        }
     }
 
     fn write_json(
@@ -71,21 +94,19 @@ impl RedisWriter {
         payload: &serde_json::Value,
     ) -> Result<String, Box<dyn Error>> {
         let body = serde_json::to_string(payload)?;
-        if self.conn.is_none() {
-            self.conn = self.client.get_connection().ok();
-        }
         let key = format!("{}{}", symbol, self.key_suffix);
-        if let Some(conn) = self.conn.as_mut() {
-            let res: redis::RedisResult<String> = conn.set(&key, body);
-            match res {
-                Ok(_) => Ok(key),
-                Err(err) => {
-                    self.conn = None;
-                    Err(err.into())
-                }
+        let conn = self.ensure_conn()?;
+        let res: redis::RedisResult<String> = conn.set(&key, body);
+        match res {
+            Ok(_) => Ok(key),
+            Err(err) => {
+                self.conn = None;
+                Err(format!(
+                    "redis write failed url={} key={} err={}",
+                    self.redis_url, key, err
+                )
+                .into())
             }
-        } else {
-            Err("redis connection unavailable".into())
         }
     }
 }
@@ -135,8 +156,7 @@ impl RollingRuntime {
         }
         let states = init_states(&cfg, all_symbols)?;
 
-        let redis_writer = RedisWriter::connect(&redis_url, &redis_key)
-            .unwrap_or_else(|err| panic!("redis connect failed url={} err={}", redis_url, err));
+        let redis_writer = RedisWriter::connect(&redis_url, &redis_key)?;
         info!(
             "rolling runtime ready process_cfg={} symbols={} symbols_config={} reload_sec={} redis_url={} redis_key={}",
             process_cfg_path,
